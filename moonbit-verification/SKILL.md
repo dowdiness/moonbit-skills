@@ -1,3 +1,12 @@
+---
+name: moonbit-verification
+description: >
+  Quality checklist for MoonBit development. Use when implementing or
+  modifying MoonBit code to catch dependency issues, syntax mistakes,
+  test failures, CLI bugs, and interface changes before they become
+  problems.
+---
+
 # MoonBit Development Verification Skill
 
 **Trigger**: Use this skill when implementing or modifying MoonBit code to ensure quality and catch common issues early.

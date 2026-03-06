@@ -1,3 +1,14 @@
+---
+name: moonbit-traits
+description: >
+  Reference guide for effective trait usage in MoonBit's Self-based
+  trait system (no type parameters, no associated types). Use when
+  writing MoonBit traits, designing APIs with traits, or when the user
+  asks about trait patterns like endomorphisms, capability traits,
+  callback-based iteration, trait multiplication, newtypes, or visitor
+  pattern in MoonBit.
+---
+
 # Effective Trait Usage Patterns in MoonBit
 
 ## Introduction
@@ -132,10 +143,6 @@ Fine-grained traits are essential under this constraint set because:
 2. **Composition via multiple trait bounds** (`T : Readable + Closable`) replaces what would otherwise require generic traits
 3. **Implementors** only pay for what they provide
 
-### The Go Lesson
-
-Go's `io.Reader` interface (a single `Read([]byte) (int, error)` method) demonstrates that fixing the buffer type to `[]byte` and keeping interfaces minimal produces a highly composable ecosystem. The same principle applies here.
-
 ### When to Use
 
 - I/O abstractions
@@ -194,7 +201,7 @@ trait Iterable {
 }
 ```
 
-This is effectively a fallback to dynamic typing within a statically-typed shell. It trades compile-time element-type safety for universality. Use it when you need a common interface across many different data sources.
+This is effectively a fallback to dynamic typing within a statically-typed shell.
 
 ### Solution C: Fold-Style Aggregation
 
@@ -214,7 +221,7 @@ trait Reducible {
 }
 ```
 
-This pre-applies the operation, sidestepping the need to abstract over element types entirely. Useful when you know *what* you want to compute but want to abstract over *what* you're computing it from.
+This pre-applies the operation, sidestepping the need to abstract over element types entirely.
 
 ### When to Use
 
@@ -238,11 +245,9 @@ trait ToJson   { to_json(Self) -> JsonValue }
 
 ### Managing Combinatorial Growth
 
-The concern with this pattern is explosion of trait count. Mitigations:
-
 1. **Only define what you need.** In practice, the set of useful conversions is small.
 2. **Group by domain.** A serialization module defines `ToJson`, `ToBytes`, `ToXml`. A numeric module defines `ToInt`, `ToFloat`.
-3. **Prefer a universal representation.** If many types need to interconvert, route them all through a common intermediate (like `Value` or `JsonValue`) rather than defining N² direct conversions.
+3. **Prefer a universal representation.** Route through a common intermediate (like `Value` or `JsonValue`) rather than defining N² direct conversions.
 
 ### When to Use
 
@@ -268,7 +273,7 @@ impl HasMagnitude for Seconds with magnitude(self) { self.value }
 impl HasMagnitude for MetersPerSecond with magnitude(self) { self.value }
 ```
 
-Each newtype can implement the same trait differently, and the type system prevents you from mixing `Meters` and `Seconds` accidentally. This is the technique that compensates most directly for the lack of type parameters: instead of `Quantity[Unit]`, you define `Meters`, `Seconds`, etc., each as its own type.
+Each newtype can implement the same trait differently, and the type system prevents you from mixing `Meters` and `Seconds` accidentally.
 
 ### When to Use
 
@@ -292,7 +297,7 @@ trait Visitable {
 }
 ```
 
-Each `visit_*` method takes a concrete type, so no type parameters are needed. This is the classic GoF Visitor pattern, and it remains relevant precisely because it solves the dispatch problem without generics.
+Each `visit_*` method takes a concrete type, so no type parameters are needed.
 
 ### When to Use
 
@@ -322,32 +327,11 @@ Split into `Queryable`, `Transactional`, `Configurable`, etc.
 
 ### Phantom Generality
 
-Don't create a trait that *looks* general but can only have one meaningful implementation:
-
-```moonbit
-// If only one type will ever implement this, it's not a useful trait
-trait AppConfig {
-  get_port(Self) -> Int
-  get_host(Self) -> String
-  get_db_url(Self) -> String
-}
-```
-
-Use a struct directly instead.
+Don't create a trait that *looks* general but can only have one meaningful implementation. Use a struct directly instead.
 
 ### Forcing Trait Where a Function Suffices
 
-If the operation does not vary by type, it does not need to be a trait:
-
-```moonbit
-// This is just a function, not a meaningful trait
-trait Addable {
-  add_ints(Self, Int, Int) -> Int  // Self is never used meaningfully
-}
-
-// Just write a function
-fn add_ints(a: Int, b: Int) -> Int { a + b }
-```
+If the operation does not vary by type, it does not need to be a trait.
 
 ## Summary of Design Heuristics
 

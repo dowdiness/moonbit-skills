@@ -1,3 +1,14 @@
+---
+name: moonbit-expression-problem
+description: >
+  Guide to solving the Expression Problem in MoonBit using Finally
+  Tagless encoding, two-layer architecture (tagless + concrete AST),
+  and related patterns. Use when designing extensible data types,
+  adding new variants or operations to existing code, working with
+  Finally Tagless, Object Algebras, open recursion, or discussing
+  extensibility trade-offs in MoonBit.
+---
+
 # Solving the Expression Problem in MoonBit
 
 ## The Expression Problem
@@ -25,7 +36,6 @@ Finally Tagless encoding is the most effective solution to the Expression Proble
 ### Basic Setup
 
 ```moonbit
-// The "syntax" is a trait — each constructor is a method
 trait ExprSym {
   lit(Int) -> Self
   add(Self, Self) -> Self
@@ -61,10 +71,6 @@ Expressions are written as generic functions:
 fn example1[T : ExprSym]() -> T {
   T::add(T::lit(1), T::neg(T::lit(2)))
 }
-
-// Use:
-// example1[Eval]()  => Eval { value: -1 }
-// example1[Show]()  => Show { repr: "(1 + (-2))" }
 ```
 
 ### Extending the Data Axis
@@ -76,7 +82,6 @@ trait MulSym {
   mul(Self, Self) -> Self
 }
 
-// Extend all existing interpretations:
 impl MulSym for Eval with mul(a, b) { { value: a.value * b.value } }
 impl MulSym for Show with mul(a, b) {
   { repr: "(\{a.repr} * \{b.repr})" }
@@ -166,9 +171,7 @@ fn optimize[T : ExprSym](e: T) -> T {
 }
 ```
 
-Optimization passes, tree transformations, and structural queries are out of scope for Finally Tagless.
-
-**No first-class expression values.** An expression like `example1` is a function `[T : ExprSym]() -> T`, not a storable value. You cannot place it in a data structure or pass it to a function that is not generic. Workaround: materialize to a concrete AST (see Solution 3).
+**No first-class expression values.** An expression like `example1` is a function `[T : ExprSym]() -> T`, not a storable value. You cannot place it in a data structure or pass it to a function that is not generic.
 
 ## Solution 2: Enum + Trait (Baseline, One-Axis Only)
 
@@ -236,7 +239,6 @@ impl MulSym for ConcreteExpr with mul(a, b) { Mul(a, b) }
 4. **Replay** a `ConcreteExpr` back through the tagless API if needed
 
 ```moonbit
-// Replay: convert concrete AST back to any interpretation
 fn replay[T : ExprSym + MulSym](e: ConcreteExpr) -> T {
   match e {
     Lit(n) => T::lit(n)
@@ -250,12 +252,12 @@ fn replay[T : ExprSym + MulSym](e: ConcreteExpr) -> T {
 
 When a **new variant** is added (e.g., `DivSym`):
 
-- The Finally Tagless traits: **no change** (new trait `DivSym` added independently)
-- Existing interpretations (Eval, Show, Depth): **no change** to existing impls (new impls added)
-- `ConcreteExpr` enum: **must be modified** to add `Div(ConcreteExpr, ConcreteExpr)`
-- `replay` function: **must be modified** to handle the new case
+- The Finally Tagless traits: **no change**
+- Existing interpretations (Eval, Show, Depth): **no change** to existing impls
+- `ConcreteExpr` enum: **must be modified**
+- `replay` function: **must be modified**
 
-The key insight: *the cost of change is localized.* Only `ConcreteExpr` and `replay` need updating; all generic code (expression construction functions, interpretations) remains untouched.
+The key insight: *the cost of change is localized.*
 
 ### Scorecard
 
@@ -285,35 +287,16 @@ fn eval_algebra() -> ExprAlgebra {
 }
 ```
 
-Extension is done by defining a new record type:
-
-```moonbit
-struct ExtExprAlgebra {
-  base: ExprAlgebra
-  on_mul: (Int, Int) -> Int
-}
-
-fn eval_ext_algebra() -> ExtExprAlgebra {
-  {
-    base: eval_algebra(),
-    on_mul: fn(a, b) { a * b },
-  }
-}
-```
-
 ### Trade-offs
 
 - **Pro**: Does not require the trait system at all; purely value-level
 - **Pro**: Algebras are first-class values (can be stored, passed, composed)
 - **Con**: No type-level enforcement that all cases are handled
 - **Con**: Extending with a new variant requires a new record type
-- **Con**: No method dispatch — callers must manually select the right function
-
-This is essentially the **Object Algebra** pattern without type parameters. It is useful when you need runtime flexibility (e.g., swappable interpreters) but is less type-safe than the Finally Tagless approach.
 
 ## Solution 5: Defunctionalized Tagless (Partial Structure Recovery)
 
-A middle ground: retain *tags* indicating which constructor was used, alongside the computed result.
+Retain *tags* indicating which constructor was used, alongside the computed result:
 
 ```moonbit
 enum ExprTag {
@@ -340,48 +323,24 @@ impl ExprSym for TaggedEval with add(a, b) {
 }
 ```
 
-This recovers *shallow* structural information (what operation produced this value, and what were its immediate children's tags) without storing the full tree. Useful for:
-
-- Debugging / tracing
-- Lightweight profiling ("how many additions vs. multiplications?")
-- Conditional behavior based on the last operation
-
-It does **not** enable tree transformations or deep pattern matching.
-
-## Solution 6: Visitor Pattern (Classic OOP Approach)
-
-If you need runtime polymorphism and are willing to fix the set of *operations* but leave the set of *types* open:
-
-```moonbit
-trait ExprVisitor {
-  visit_lit(Self, Int) -> Unit
-  visit_add(Self, Int, Int) -> Unit
-  visit_mul(Self, Int, Int) -> Unit
-}
-
-trait Visitable {
-  accept(Self, &ExprVisitor) -> Unit
-}
-```
-
-This is the dual of the enum approach: operations are fixed in the `ExprVisitor` trait, but any type can become `Visitable`. Adding a new variant requires modifying `ExprVisitor` (adding a new `visit_*` method), so this does **not** solve the Expression Problem in general, but it can be useful when the set of operations is truly stable.
+This recovers *shallow* structural information without storing the full tree. Useful for debugging and lightweight profiling.
 
 ## Theoretical Boundaries
 
 A complete solution to the Expression Problem requires the ability to **abstract over types** — specifically:
 
 1. **Existential types**: "some type that implements `ExprSym`" as a first-class value
-2. **Type constructor polymorphism**: abstracting over `F[_]` (needed for Object Algebras, Free Monads)
-3. **Extensible variants / row polymorphism**: open sum types that can be extended post-definition
+2. **Type constructor polymorphism**: abstracting over `F[_]`
+3. **Extensible variants / row polymorphism**: open sum types
 
-MoonBit's Self-based traits without type parameters provide none of these directly. Finally Tagless succeeds because it cleverly avoids needing them: instead of storing "an expression" as a value (which requires existential types), it represents expressions as **parametrically polymorphic construction processes**.
+MoonBit's Self-based traits without type parameters provide none of these directly. Finally Tagless succeeds because it cleverly avoids needing them: instead of storing "an expression" as a value, it represents expressions as **parametrically polymorphic construction processes**.
 
-The price paid is the inability to observe structure. This is a fundamental trade-off, not an implementation limitation:
+The price paid is the inability to observe structure. This is a fundamental trade-off:
 
 - **Structure = closed** (enum): you can see inside, but cannot extend
 - **Abstraction = open** (tagless): you can extend, but cannot see inside
 
-The Two-Layer Architecture (Solution 3) explicitly manages this trade-off by maintaining both representations and providing a bridge (`replay`) between them.
+The Two-Layer Architecture explicitly manages this trade-off.
 
 ## Decision Guide
 
@@ -399,8 +358,6 @@ Is the set of variants fixed?
 
 ## Complete Example: A Mini Language
 
-Bringing it all together with a realistic example:
-
 ```moonbit
 // ── Syntax traits (extensible) ──
 
@@ -414,11 +371,6 @@ trait MulSym {
   mul(Self, Self) -> Self
 }
 
-trait LetSym {
-  // `let x = e1 in e2` as a higher-order method
-  let_(String, Self, (Self) -> Self) -> Self
-}
-
 // ── Interpretation: Evaluate ──
 
 struct Eval { value: Int }
@@ -427,20 +379,6 @@ impl ArithSym for Eval with lit(n)      { { value: n } }
 impl ArithSym for Eval with add(a, b)   { { value: a.value + b.value } }
 impl ArithSym for Eval with neg(a)      { { value: -a.value } }
 impl MulSym   for Eval with mul(a, b)   { { value: a.value * b.value } }
-impl LetSym   for Eval with let_(_name, e1, body) { body(e1) }
-
-// ── Interpretation: Count operations ──
-
-struct OpCount { count: Int }
-
-impl ArithSym for OpCount with lit(_n)    { { count: 0 } }
-impl ArithSym for OpCount with add(a, b)  { { count: 1 + a.count + b.count } }
-impl ArithSym for OpCount with neg(a)     { { count: 1 + a.count } }
-impl MulSym   for OpCount with mul(a, b)  { { count: 1 + a.count + b.count } }
-impl LetSym   for OpCount with let_(_name, e1, body) {
-  let e2 = body(e1)
-  { count: e1.count + e2.count }
-}
 
 // ── Interpretation: Pretty-print ──
 
@@ -450,11 +388,6 @@ impl ArithSym for Pretty with lit(n)     { { repr: n.to_string() } }
 impl ArithSym for Pretty with add(a, b)  { { repr: "(\{a.repr} + \{b.repr})" } }
 impl ArithSym for Pretty with neg(a)     { { repr: "(-\{a.repr})" } }
 impl MulSym   for Pretty with mul(a, b)  { { repr: "(\{a.repr} * \{b.repr})" } }
-impl LetSym   for Pretty with let_(name, e1, body) {
-  let placeholder = Pretty::{ repr: name }
-  let e2 = body(placeholder)
-  { repr: "let \{name} = \{e1.repr} in \{e2.repr}" }
-}
 
 // ── Concrete AST (for structural operations) ──
 
@@ -474,11 +407,11 @@ impl MulSym   for Ast with mul(a, b) { AMul(a, b) }
 
 fn optimize(e: Ast) -> Ast {
   match e {
-    AAdd(ALit(0), x) => optimize(x)       // 0 + x => x
-    AAdd(x, ALit(0)) => optimize(x)       // x + 0 => x
-    AMul(ALit(1), x) => optimize(x)       // 1 * x => x
-    AMul(x, ALit(1)) => optimize(x)       // x * 1 => x
-    AMul(ALit(0), _) => ALit(0)           // 0 * x => 0
+    AAdd(ALit(0), x) => optimize(x)
+    AAdd(x, ALit(0)) => optimize(x)
+    AMul(ALit(1), x) => optimize(x)
+    AMul(x, ALit(1)) => optimize(x)
+    AMul(ALit(0), _) => ALit(0)
     AAdd(a, b) => AAdd(optimize(a), optimize(b))
     AMul(a, b) => AMul(optimize(a), optimize(b))
     ANeg(a) => ANeg(optimize(a))
@@ -504,22 +437,13 @@ fn program[T : ArithSym + MulSym]() -> T {
   T::mul(T::add(T::lit(1), T::lit(0)), T::add(T::lit(2), T::lit(3)))
 }
 
-// Direct interpretation:
-//   program[Eval]()    => Eval { value: 5 }
-//   program[Pretty]()  => Pretty { repr: "((1 + 0) * (2 + 3))" }
-
-// Optimized interpretation:
-//   let ast = program[Ast]()          // materialize
-//   let opt = optimize(ast)           // transform:  AMul(ALit(1), AAdd(ALit(2), ALit(3)))
-//   replay[Pretty](opt)              // replay:     Pretty { repr: "(1 * (2 + 3))" }
-//   replay[Eval](opt)                // replay:     Eval { value: 5 }
+// Direct: program[Eval]() => Eval { value: 5 }
+// Optimized: replay[Pretty](optimize(program[Ast]()))
 ```
 
 ## References
 
 - Wadler, P. (1998). *The Expression Problem.* Java-genericity mailing list.
-- Carette, J., Kiselyov, O., & Shan, C. (2009). *Finally Tagless, Partially Evaluated.* Journal of Functional Programming.
-- Oliveira, B. C. d. S., & Cook, W. R. (2012). *Extensibility for the Masses: Practical Extensibility with Object Algebras.* ECOOP.
-- Wadler, P., & Blott, S. (1989). *How to Make Ad-Hoc Polymorphism Less Ad Hoc.* POPL.
-- Canning, P., Cook, W., Hill, W., Olthoff, W., & Mitchell, J. C. (1989). *F-Bounded Polymorphism for Object-Oriented Programming.* FPCA.
-- Swierstra, W. (2008). *Data Types à la Carte.* Journal of Functional Programming.
+- Carette, J., Kiselyov, O., & Shan, C. (2009). *Finally Tagless, Partially Evaluated.* JFP.
+- Oliveira, B. C. d. S., & Cook, W. R. (2012). *Extensibility for the Masses.* ECOOP.
+- Swierstra, W. (2008). *Data Types à la Carte.* JFP.

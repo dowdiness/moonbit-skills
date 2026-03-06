@@ -1,53 +1,42 @@
-# MoonBit Development Verification Skill
+# moonbit-skills
 
-A comprehensive quality checklist for MoonBit development that catches common issues before they become bugs.
+Claude Code skills for MoonBit development, managed via symlinks to `~/.claude/skills/`.
 
-## Usage
-
-Invoke this skill when working on MoonBit code:
+## Installation
 
 ```bash
-/moonbit-skills
+git clone https://github.com/dowdiness/moonbit-skills.git
+cd moonbit-skills
+./install.sh
 ```
 
-Or reference it in your prompts:~
+This creates symlinks in `~/.claude/skills/` for each skill directory.
+
+## Uninstallation
+
+```bash
+./uninstall.sh
+```
+
+Only removes symlinks pointing to this repository. Other skills are not affected.
+
+## Adding a New Skill
+
+1. Create a new directory at the repository root (e.g., `moonbit-my-skill/`)
+2. Add a `SKILL.md` file inside it with YAML frontmatter (`name`, `description`) followed by the skill content
+3. Run `./install.sh` to link the new skill
+
+## Directory Structure
 
 ```
-"Implement this feature following the moonbit-skills skill workflow"
-"Use /moonbit-skills to verify this implementation"
+moonbit-skills/
+├── README.md
+├── install.sh
+├── uninstall.sh
+├── moonbit-traits/
+│   └── SKILL.md
+└── moonbit-expression-problem/
+    └── SKILL.md
 ```
 
-## What It Does
-
-This skill guides Claude through a systematic verification process:
-
-1. **Pre-flight checks**: Verifies dependencies before implementation starts
-2. **Syntax awareness**: Ensures correct MoonBit idioms (tuple destructuring, labelled args, error handling)
-3. **Test verification**: Runs tests and verifies assertion formats match exactly
-4. **CLI testing**: Checks help text, flag shadowing, and error messages for CLI tools
-5. **Interface review**: Updates and reviews `.mbti` files for API changes
-6. **Quality gates**: Won't mark tasks complete until all checks pass
-
-## Why This Helps
-
-Based on Claude Code usage insights, this skill addresses:
-
-- **49 instances of buggy code** - Catches functional bugs before delivery
-- **19 dependency issues** - Checks dependency health upfront
-- **Syntax struggles** - Prevents MoonBit-specific compilation errors
-- **Test failures** - Ensures error message formats match assertions exactly
-- **CLI bugs** - Catches help text and flag shadowing issues early
-
-## Designed For
-
-- Feature implementation in MoonBit projects
-- CLI tool development (argparser, command-line apps)
-- Library development with public APIs
-- Multi-file refactoring
-- Code that needs to pass comprehensive test suites
-
-## Tips
-
-- Use this skill before starting large features to establish a quality baseline
-- Reference it in your project's CLAUDE.md to make it automatic
-- Combine with hooks to auto-run checks after edits
+Each subdirectory containing a `SKILL.md` is treated as a skill and symlinked by `install.sh`.
