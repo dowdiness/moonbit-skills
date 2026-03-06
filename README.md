@@ -10,7 +10,7 @@ Invoke this skill when working on MoonBit code:
 /moonbit-skills
 ```
 
-Or reference it in your prompts:
+Or reference it in your prompts:~
 
 ```
 "Implement this feature following the moonbit-skills skill workflow"
