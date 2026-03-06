@@ -7,14 +7,14 @@ A comprehensive quality checklist for MoonBit development that catches common is
 Invoke this skill when working on MoonBit code:
 
 ```bash
-/moonbit-check
+/moonbit-skills
 ```
 
 Or reference it in your prompts:
 
 ```
-"Implement this feature following the moonbit-check skill workflow"
-"Use /moonbit-check to verify this implementation"
+"Implement this feature following the moonbit-skills skill workflow"
+"Use /moonbit-skills to verify this implementation"
 ```
 
 ## What It Does
