@@ -192,20 +192,26 @@ Build a table per module from discovered `moon.pkg.json` files. Include package 
 
 ### Auto-Detected Section: Documentation
 
-If a `docs/` directory exists, generate a Documentation section listing the subdirectories. If `docs/archive/` exists, include the archive rule:
+If a `docs/` directory exists, generate a Documentation section listing the subdirectories. Include the documentation doctrine rules and the archive rule:
 
 ```markdown
 ## Documentation
 
 **Main docs:** [docs/](docs/)
 
-- **Architecture:** [docs/architecture/](docs/architecture/)
+- **Architecture:** [docs/architecture/](docs/architecture/) — principles and invariants only
 - **Development:** [docs/development/](docs/development/)
-- **Performance:** [docs/performance/](docs/performance/)
+- **Performance:** [docs/performance/](docs/performance/) — dated snapshots, not updated in place
 - **Archive:** `docs/archive/` — completed plans and stale documents. Do not search here unless you need historical context.
+
+**Documentation rules:**
+- Architecture docs = principles only, never reference specific types/fields/lines. Link to files instead.
+- Plans = implementation details (struct defs, code examples, file paths). Archived on completion.
+- Performance docs = dated snapshots. New measurements go in new files, old ones are not updated.
+- Code is the source of truth — if a doc and the code disagree, the doc is wrong.
 ```
 
-The **archive rule is mandatory** when `docs/archive/` exists: always include the note that `docs/archive/` contains completed plans and stale documents, and should not be searched unless historical context is needed. This prevents agents from wasting time reading outdated plans.
+The **documentation doctrine is mandatory** for all generated CLAUDE.md files. It prevents the staleness problem where architecture docs reference specific types/fields that change every PR. The **archive rule is mandatory** when `docs/archive/` exists.
 
 ### Fixed Section: MoonBit Conventions
 
