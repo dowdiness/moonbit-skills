@@ -76,6 +76,9 @@ If modifying performance-critical paths:
 - Compare results to baseline if available
 - Report any significant performance changes
 
+### 8. Performance Optimization Gate
+**If the task is a performance optimization**, use the `moonbit-perf-investigation` skill BEFORE designing any solution. That skill requires reproducing the claimed bottleneck in an isolated microbenchmark. Do not skip this — stale profiling data and O(bad) complexity are not proof of a real problem.
+
 ## Quality Checklist
 
 Before marking the task complete, verify:
