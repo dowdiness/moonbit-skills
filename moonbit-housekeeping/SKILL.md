@@ -27,6 +27,7 @@ Two-tier repo maintenance. **Tier 1 (Haiku):** mechanical checks in 4 sequential
 - `/moonbit-housekeeping changelog` — draft changelog from git log
 - `/moonbit-housekeeping api-review` — classify .mbti changes by risk/intent
 - `/moonbit-housekeeping doc-drift` — check dev docs for stale references
+- `/moonbit-housekeeping organize` — update decisions-needed.md from triage results
 
 ### Combined
 - `/moonbit-housekeeping full` — all Haiku + all Sonnet categories (~$5-8)
@@ -81,6 +82,7 @@ Parse the user's argument:
 | `changelog` | report | sonnet | changelog |
 | `api-review` | report | sonnet | api-review |
 | `doc-drift` | report | sonnet | doc-drift |
+| `organize` | report | sonnet | organize (runs triage first if needed) |
 | `full` | report | both | all haiku + all sonnet |
 
 ### Step 3: Dispatch subagents
@@ -438,6 +440,62 @@ CLASSIFICATION RULES:
 - "stale": reference target does not exist, no obvious rename (confidence: high)
 - "renamed": reference target missing but similar name found nearby (confidence: medium)
 - "removed": reference target and related code completely gone (confidence: high)
+~~~
+
+### Organize Prompt
+
+~~~
+You are an organize agent for a MoonBit project. Update the decision queue from triage results.
+
+WORKING DIRECTORY: {CWD}
+TRIAGE OUTPUT: {TRIAGE_JSON_OR_NONE}
+
+RULES:
+- Maximum 15 tool calls. Batch aggressively.
+- This agent WRITES files (docs/decisions-needed.md). It is NOT read-only.
+- Always show the proposed changes before writing. Output a JSON diff first.
+- Preserve any human-added notes or annotations in existing items.
+
+WORKFLOW:
+1. If TRIAGE_JSON is not provided, tell Opus to run triage first. Do not proceed.
+2. Read docs/decisions-needed.md (if it exists).
+3. From triage findings, extract items with classification "needs-human-review".
+4. Compare with existing decisions-needed.md:
+   - NEW: items in triage but not in decisions-needed.md → add to "Pending" section
+   - RESOLVED: items in decisions-needed.md but classified as "done" in triage → move to "Recently Resolved"
+   - UNCHANGED: items in both with same classification → preserve, keep any human notes
+   - DECIDED: items that now exist in docs/decisions/ → remove from decisions-needed.md
+5. Also check: items classified as "active" or "blocked" that have no plan file → suggest creating one
+6. Write the updated docs/decisions-needed.md using the Edit tool.
+
+For NEW items, format as:
+
+### <short title>
+**Source:** <where it came from>
+**Context:** <what the decision is about, 2-3 sentences>
+**Blocks:** <what this decision blocks, or "Nothing directly">
+**Evidence:** <evidence from triage>
+**Added:** <today's date>
+
+OUTPUT SCHEMA:
+{
+  "category": "organize",
+  "status": "pass|warn",
+  "actions": [
+    {
+      "type": "added|resolved|removed|unchanged",
+      "item": "short title",
+      "reason": "explanation"
+    }
+  ],
+  "pending_count": 3,
+  "resolved_count": 0,
+  "suggestions": [
+    "Consider creating a plan for 'position-cache-non-sequential' (active, no plan)"
+  ],
+  "truncated": false,
+  "tool_calls_used": 8
+}
 ~~~
 
 ---
