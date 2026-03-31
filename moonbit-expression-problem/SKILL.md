@@ -33,6 +33,10 @@ MoonBit, with its Self-based traits (no type parameters, no associated types), h
 
 Finally Tagless encoding is the most effective solution to the Expression Problem under MoonBit's constraints. It works by representing syntax as **trait method calls** rather than data constructors.
 
+### Naming: The `*Sym` Convention
+
+Traits in this pattern are named with the `Sym` suffix — `ExprSym`, `TermSym`, `ArithSym`. This comes from **Symantics**, a portmanteau of *syntax* and *semantics* coined by Kiselyov in the original Finally Tagless paper. Each trait method is a syntactic constructor whose meaning (semantics) is supplied by whichever type `Self` is bound to. The name signals this dual role.
+
 ### Basic Setup
 
 ```moonbit

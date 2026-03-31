@@ -71,6 +71,17 @@ Claude Code hooks use this EXACT format — do NOT use `"PreCommit"` or other ma
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "moon check 2>&1 | head -20"
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [
@@ -89,6 +100,7 @@ Claude Code hooks use this EXACT format — do NOT use `"PreCommit"` or other ma
 ### Key rules
 
 - **`PreToolUse` with `matcher`** — NOT `"PreCommit"`. The matcher `"Bash(git commit*)"` scopes the hook to commit commands only.
+- **`PostToolUse` on `Edit|MultiEdit`** — runs `moon check` after every file edit, surfacing errors immediately rather than letting them compound across multiple files.
 - **Keep pre-commit fast** — only `moon check && moon test` for the current module. Do NOT run `moon info && moon fmt` in the hook (those change files, which is confusing mid-commit). Do NOT run all modules — just the current one.
 - **Relative commands** — do NOT hardcode absolute paths. The hook runs from the working directory.
 - **`SessionStart`** — run `moon update` to ensure dependencies are fresh.
@@ -99,7 +111,7 @@ If `.claude/settings.json` already exists:
 
 1. Read the existing file
 2. Parse as JSON
-3. For each hook key (`PreToolUse`, `SessionStart`):
+3. For each hook key (`PreToolUse`, `PostToolUse`, `SessionStart`):
    - If the key doesn't exist → add it
    - If the key exists → check if a matching entry already exists (same matcher/command). Skip if duplicate; append if new.
 4. Preserve all other existing keys (e.g., `permissions`, `enabledPlugins`)
@@ -134,24 +146,34 @@ Adjust module paths based on auto-detected structure. Use relative paths from th
 
 ## Step 3: Generate `CLAUDE.md`
 
+### Keep CLAUDE.md Short — Use @-imports for Shared Content
+
+CLAUDE.md is loaded into every request. Embedding fixed MoonBit conventions inline means every project pays ~100 token overhead for content that never changes. Instead:
+
+1. **Write shared MoonBit conventions once** to `~/.claude/moonbit-base.md` (user-level, reused across all MoonBit projects)
+2. **CLAUDE.md @-imports it** — one line instead of 100
+3. **CLAUDE.md only contains project-specific facts** — module structure, submodules, docs paths, key facts
+
+**Target size:** CLAUDE.md should be under 80 lines. If it's longer, extract the generic parts.
+
 ### Section Order (MANDATORY)
 
-Generate sections in this EXACT order. Language Notes MUST be near the top — not buried at the bottom.
+Generate sections in this EXACT order. The file should be lean — project-specific content only, shared conventions @-imported.
 
-1. `# CLAUDE.md` — title
-2. `## Project Overview` — auto-detected from `moon.mod.json` name/description
-3. `## MoonBit Language Notes` — FIXED content, near top so always visible
+1. `# Project title` — one-line description
+2. `@~/.claude/moonbit-base.md` — imports all shared MoonBit conventions (Language Notes, Conventions, Code Changes, Code Review Standards, Development Workflow, Git & PR Workflow)
+3. `## Project Structure` — auto-detected submodules + packages, with archive path convention
 4. `## Commands` — auto-detected per-module commands
-5. `## Package Map` — auto-detected from `moon.pkg.json` hierarchy
-6. `## Documentation` — auto-detected from docs/ structure, with archive rule
-7. `## MoonBit Conventions` — FIXED template for test patterns, file naming
-8. `## Code Review Standards` — FIXED content
-9. `## Development Workflow` — FIXED quality-first checklist
-10. `## Git Workflow` — FIXED content
+5. `## Documentation` — auto-detected from docs/ structure, with archive rule
+6. `## Key Facts` — project-specific facts (CRDT algorithm, language, ground truth, etc.)
 
-### Fixed Section: MoonBit Language Notes
+### Generate `~/.claude/moonbit-base.md` (if not exists)
+
+Write the shared base file once. Skip if already exists.
 
 ```markdown
+# MoonBit Base Conventions
+
 ## MoonBit Language Notes
 
 - `pub` vs `pub(all)` visibility modifiers have different semantics — check current docs before using
@@ -161,6 +183,55 @@ Generate sections in this EXACT order. Language Notes MUST be near the top — n
 - `ref` is a reserved keyword — do not use as variable/field names
 - Blackbox tests cannot construct internal structs — use whitebox tests or expose constructors
 - For cross-target builds, use per-file conditional compilation rather than `supported-targets` in moon.pkg.json
+- Error handling syntax: use `Unit!Error` or `T!Error` for fallible return types. Error propagation uses `!` suffix on calls, not `raise` keyword. Always verify MoonBit syntax against recent compiler behavior before committing.
+
+## MoonBit Conventions
+
+- **Block-style:** Code organized in `///|` separated blocks
+- **Testing:** Use `inspect` for snapshots, `@qc` for properties
+- **Files:** `*_test.mbt` (blackbox), `*_wbtest.mbt` (whitebox), `*_benchmark.mbt`
+- **Format:** Always `moon info && moon fmt` before committing
+- **Trait impl:** `pub impl Trait for Type with method(self) { ... }` — one method per impl block
+- **Arrow functions:** `() => expr`, `() => { stmts }`. Empty body: `() => ()` not `() => {}`
+
+## Code Changes
+
+- Before suggesting code removal, check if symbols are re-exported as public API for downstream consumers. Do not delete structs/types that appear unused internally but may be part of the library's public interface.
+
+## Code Review Standards
+
+- Never dismiss a review request — always do a thorough line-by-line review even if changes seem minor
+- Check for: integer overflow, zero/negative inputs, boundary validation, generation wrap-around
+- Do not suggest deleting public API types (Id structs, etc.) as 'unused' — they may be needed by downstream consumers
+- Verify method names match actual API before writing tests (e.g., check if it's `insert` vs `add_local_op`)
+
+## Development Workflow
+
+### Performance Optimization Rule
+
+Before designing any performance optimization, write a microbenchmark that **reproduces the claimed bottleneck** in isolation. If the benchmark can't demonstrate the problem, stop and re-evaluate. Stale profiling data and O(bad) complexity are not proof of a real problem.
+
+### Incremental Edit Rule
+
+**CRITICAL:** After every file edit, run `moon check` before proceeding to the next file. If there are errors, fix them immediately before continuing with the plan.
+
+### Standard Workflow
+
+1. Make edits
+2. `moon check` — Lint
+3. `moon test` — Run tests
+4. `moon test --update` — Update snapshots (if behavior changed)
+5. `moon info` — Update `.mbti` interfaces
+6. Check `git diff *.mbti` — Verify API changes
+7. `moon fmt` — Format
+
+## Git & PR Workflow
+
+- Always check if git is initialized before running git commands
+- After rebase operations, verify files are in the correct directories
+- When asked to 'commit remaining files', interpret generously even if phrasing is unclear
+- When merging PRs, always verify CI status is actually passing (not skipped) before proceeding. Never represent CI as green if any checks were skipped or failed.
+- After rebasing or refactoring, verify file paths haven't shifted unexpectedly. Run `git diff --stat` to confirm only intended files changed.
 ```
 
 ### Auto-Detected Section: Commands
@@ -213,60 +284,6 @@ If a `docs/` directory exists, generate a Documentation section listing the subd
 
 The **documentation doctrine is mandatory** for all generated CLAUDE.md files. It prevents the staleness problem where architecture docs reference specific types/fields that change every PR. The **archive rule is mandatory** when `docs/archive/` exists.
 
-### Fixed Section: MoonBit Conventions
-
-```markdown
-## MoonBit Conventions
-
-- **Block-style:** Code organized in `///|` separated blocks
-- **Testing:** Use `inspect` for snapshots, `@qc` for properties
-- **Files:** `*_test.mbt` (blackbox), `*_wbtest.mbt` (whitebox), `*_benchmark.mbt`
-- **Format:** Always `moon info && moon fmt` before committing
-- **Trait impl:** `pub impl Trait for Type with method(self) { ... }` — one method per impl block
-- **Arrow functions:** `() => expr`, `() => { stmts }`. Empty body: `() => ()` not `() => {}`
-```
-
-### Fixed Section: Code Review Standards
-
-```markdown
-## Code Review Standards
-
-- Never dismiss a review request — always do a thorough line-by-line review even if changes seem minor
-- Check for: integer overflow, zero/negative inputs, boundary validation, generation wrap-around
-- Do not suggest deleting public API types (Id structs, etc.) as 'unused' — they may be needed by downstream consumers
-- Verify method names match actual API before writing tests (e.g., check if it's `insert` vs `add_local_op`)
-```
-
-### Fixed Section: Development Workflow
-
-```markdown
-## Development Workflow
-
-### Performance Optimization Rule
-
-Before designing any performance optimization, write a microbenchmark that **reproduces the claimed bottleneck** in isolation. If the benchmark can't demonstrate the problem, stop and re-evaluate. Stale profiling data (from before prior optimizations) and O(bad) asymptotic complexity are not proof of a real problem. Check if existing mitigations (batch modes, caching, lazy eval) already neutralize the issue.
-
-### Standard Workflow
-
-1. Make edits
-2. `moon check` — Lint
-3. `moon test` — Run tests
-4. `moon test --update` — Update snapshots (if behavior changed)
-5. `moon info` — Update `.mbti` interfaces
-6. Check `git diff *.mbti` — Verify API changes
-7. `moon fmt` — Format
-```
-
-### Fixed Section: Git Workflow
-
-```markdown
-## Git Workflow
-
-- Always check if git is initialized before running git commands
-- After rebase operations, verify files are in the correct directories
-- When asked to 'commit remaining files', interpret generously even if phrasing is unclear
-```
-
 ### Idempotent Merge for CLAUDE.md
 
 If `CLAUDE.md` already exists:
@@ -296,6 +313,7 @@ moon check  # Verify project still works
 | Hardcoding absolute paths in hooks | Use relative paths from project root |
 | Running `moon fmt` in pre-commit hook | `moon fmt` modifies files — don't run during commit check |
 | Overwriting existing settings.json | Read first, merge, then write |
-| Burying Language Notes at bottom | Section #3 — right after Project Overview |
-| Missing Code Review Standards | Always include — prevents lazy review behavior |
+| Embedding fixed sections inline | Put shared conventions in `~/.claude/moonbit-base.md` and @-import |
+| CLAUDE.md over 80 lines | Extract generic MoonBit rules to the base file |
 | Running all modules in single-module project | Detect module count and scope accordingly |
+| Archive path wrong | `docs/archive/` not `docs/plans/archive/` — always verify before moving |
