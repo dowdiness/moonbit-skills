@@ -10,7 +10,9 @@ Some skills originate from the [official MoonBit skills repository](https://gith
 |-------|--------|-------------|
 | `moonbit-agent-guide` | [official](https://github.com/moonbitlang/moonbit-agent-guide) (submodule) | Guide for writing, refactoring, and testing MoonBit projects. Moon tooling, layout, and conventions. |
 | `moonbit-c-binding` | [official](https://github.com/moonbitlang/skills/tree/main/moonbit-c-binding) (copy) | Writing MoonBit bindings to C libraries using native FFI. Stubs, ownership, callbacks, ASan. |
+| `moonbit-deprecated-syntax` | community | Tracks deprecated MoonBit syntax to avoid generating invalid code. Auto-maintained. |
 | `moonbit-expression-problem` | community | Solving the Expression Problem in MoonBit using Finally Tagless encoding and two-layer architecture. |
+| `moonbit-housekeeping` | community | Repo maintenance: dispatches Haiku subagent for phased checks (git, lint, sync, build, test). |
 | `moonbit-opaque-types` | community | Opaque/newtype pattern for user-friendly public APIs. Type-safe wrappers and facade layers. |
 | `moonbit-perf-investigation` | community | **Prerequisite for any optimization.** Reproducing bottlenecks in microbenchmarks before designing solutions. |
 | `moonbit-refactoring` | community | Idiomatic MoonBit refactoring: shrink public APIs, pattern matching, methods, loop invariants. |
