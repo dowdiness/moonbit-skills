@@ -233,8 +233,9 @@ WORKFLOW:
 1. Read docs/TODO.md in one call.
 2. Extract all plan file references (docs/plans/*.md paths). Check which exist in ONE batched Bash call:
    for f in <list of paths>; do echo "=== $f ===" ; test -f "$f" && echo "EXISTS" || echo "MISSING" ; done
-3. Extract key terms/symbols from each TODO item. Batch-grep for evidence of completion in ONE call:
-   echo "=== term1 ===" ; rg -l "term1" --type mbt ; echo "=== term2 ===" ; rg -l "term2" --type mbt ; ...
+3. Extract key terms/symbols from each TODO item. Use `moon ide` for semantic search (preferred) or batch-grep as fallback:
+   moon ide find-references Term1 ; moon ide find-references Term2
+   Fallback (for non-symbol text): echo "=== term1 ===" ; rg -l "term1" --type mbt ; ...
 4. List all files in docs/plans/ and identify orphans (not referenced in TODO.md).
 5. Classify each TODO item based on evidence gathered.
 
@@ -249,7 +250,7 @@ OUTPUT SCHEMA:
       "classification": "done|active|blocked|stale|needs-human-review",
       "confidence": "high|medium|low",
       "severity": "info|warning|error",
-      "evidence": ["plan file exists: docs/plans/...", "rg hit: editor/foo.mbt"],
+      "evidence": ["plan file exists: docs/plans/...", "moon ide find-references: found in editor/foo.mbt"],
       "recommendation": "archive|keep|investigate"
     }
   ],
@@ -415,8 +416,9 @@ WORKFLOW:
    Ignore principle-level statements ("the framework uses X pattern").
 4. Verify references exist in ONE batched Bash call:
    for ref in <paths>; do echo "=== $ref ===" ; test -e "$ref" && echo "EXISTS" || echo "MISSING" ; done
-5. For function/type references, batch-grep:
-   for sym in <symbols>; do echo "=== $sym ===" ; rg -l "$sym" --type mbt | head -3 ; done
+5. For function/type references, use `moon ide` (semantic) or grep (fallback):
+   moon ide find-references Symbol1 ; moon ide find-references Symbol2
+   Fallback (for non-symbol text): for sym in <terms>; do echo "=== $sym ===" ; rg -l "$sym" --type mbt | head -3 ; done
 6. Report drift.
 
 OUTPUT SCHEMA:
