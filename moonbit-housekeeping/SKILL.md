@@ -341,14 +341,18 @@ RULES:
 WORKFLOW:
 1. If no HAIKU_CONTEXT with mbti diff: run `moon info` then `git diff -- '*.mbti'` in ONE call.
    If HAIKU_CONTEXT has mbti diff: skip to step 2.
-2. Parse the diff. For each changed .mbti file, identify:
-   - Added public types/methods/functions
-   - Removed public types/methods/functions
-   - Changed signatures (parameter types, return types)
-3. For each change, assess intent:
-   - Read the corresponding .mbt source file to understand context (batch reads).
+2. Parse the diff to identify which packages changed. For each changed package, run:
+   moon ide analyze <package_dir>/
+   This gives the full public API with usage counts (total and test-only).
+   Symbols with "usage: 0" are potential dead code.
+3. Cross-reference the analyze output with the diff:
+   - Added symbols: new in diff + present in analyze output
+   - Removed symbols: gone from diff + absent from analyze output
+   - Usage counts reveal impact: removing a symbol with "usage: 15" is high-risk
+4. For each change, assess intent:
    - Check recent git log for the file to understand what work is in progress.
-4. Classify each change.
+   - Symbols with 0 non-test usage may be safe to remove (but check if they are public API for library consumers).
+5. Classify each change.
 
 OUTPUT SCHEMA:
 {
