@@ -5,8 +5,8 @@ description: >
   trait system (no type parameters, no associated types). Use when
   writing MoonBit traits, designing APIs with traits, or when the user
   asks about trait patterns like endomorphisms, capability traits,
-  callback-based iteration, trait multiplication, newtypes, or visitor
-  pattern in MoonBit.
+  callback-based iteration, trait multiplication, newtypes, visitor
+  pattern, or defunctionalized associated types in MoonBit.
 ---
 
 # Effective Trait Usage Patterns in MoonBit
@@ -305,6 +305,73 @@ Each `visit_*` method takes a concrete type, so no type parameters are needed.
 - Serialization of heterogeneous data
 - Any situation where you need double dispatch
 
+## Pattern 8: Defunctionalized Associated Types
+
+When a trait ideally needs an associated type (a type that varies per implementation), defunctionalize it: each implementation becomes a separate struct that fixes the associated type concretely.
+
+### Problem
+
+```moonbit
+// Cannot write — MoonBit has no associated types
+trait Pretty {
+  type Ann                        // varies per implementation
+  to_layout(Self) -> Layout[Ann]
+}
+```
+
+### Solution
+
+Each "choice" of the associated type becomes a separate struct implementing a shared trait:
+
+```moonbit
+// A generic container parameterized over the "associated type"
+pub enum Layout[A] {
+  Text(String)
+  Annotate(A, Layout[A])
+  // ...
+}
+
+// Each interpretation fixes A concretely via struct field types
+struct PrettyLayout  { layout: Layout[SyntaxCategory] }  // A = SyntaxCategory
+struct EditorLayout  { layout: Layout[EditorAnn] }       // A = EditorAnn
+struct LspLayout     { layout: Layout[LspAnn] }          // A = LspAnn
+```
+
+All three implement the same trait (e.g., `TermSym`), so `replay(term)` works with any of them via type ascription:
+
+```moonbit
+let pretty = (replay(term) : PrettyLayout).layout   // Layout[SyntaxCategory]
+let editor = (replay(term) : EditorLayout).layout    // Layout[EditorAnn]
+let lsp    = (replay(term) : LspLayout).layout       // Layout[LspAnn]
+```
+
+### Providing a Default via Trait
+
+For the most common case, provide a trait with a fixed return type:
+
+```moonbit
+pub(open) trait Pretty {
+  to_layout(Self) -> Layout[SyntaxCategory]   // default defunctionalization
+}
+
+// Method syntax for the common case
+term.to_layout()
+
+// Explicit TermSym path for richer annotations
+(replay(term) : EditorLayout).layout
+```
+
+### Key Insight
+
+The associated type becomes a **field type choice** in each struct. The trait polymorphism (type ascription on `replay`) is the "dispatch" that associated types would handle automatically. This is the same tradeoff as defunctionalization everywhere: you lose the abstraction (can't write code generic over "any annotation type") but gain concreteness (each variant is fully typed, no runtime dispatch).
+
+### When to Use
+
+- A trait method needs to return `Container[T]` where `T` varies per implementation
+- The number of concrete choices for `T` is small and known
+- A generic data type (`Layout[A]`, `Array[A]`, `Tree[A]`) is parameterized, but the trait consuming it cannot be
+- Combined with Finally Tagless: each TermSym interpretation fixes the container's type parameter differently
+
 ## Anti-Patterns
 
 ### Over-Sized Traits
@@ -344,5 +411,10 @@ If the operation does not vary by type, it does not need to be a trait.
 | Multi-type relationships | Trait Multiplication | One trait per concrete pair |
 | Type-safe wrappers | Newtypes | Distinct structs, shared traits |
 | Branching on multiple types | Visitor | Concrete `visit_*` methods |
+| Trait needs associated type | Defunctionalized Associated Types | Each impl struct fixes `Container[A]` concretely |
 
 The overarching principle: **embrace the concreteness.** Without type parameters, your traits describe relationships between `Self` and specific, known types. This is not a weakness to work around but a design constraint that pushes toward clear, discoverable, domain-grounded interfaces.
+
+## See Also
+
+- **`moonbit-expression-problem`** — for extensible data + operations (Finally Tagless, Two-Layer Architecture, Function Records). Use when the question is "how do I add new variants AND new operations?" rather than "how do I design a trait API?"

@@ -329,6 +329,82 @@ impl ExprSym for TaggedEval with add(a, b) {
 
 This recovers *shallow* structural information without storing the full tree. Useful for debugging and lightweight profiling.
 
+## Solution 6: Defunctionalized Associated Types (Parameterized Output)
+
+When a Finally Tagless interpretation needs to produce a **parameterized type** (e.g., `Layout[A]`, `Tree[A]`, `Stream[A]`) where the parameter varies per use case, but MoonBit has no associated types to express this:
+
+### Problem
+
+```moonbit
+// Cannot write — no associated types
+trait Pretty {
+  type Ann                        // what annotation type?
+  to_layout(Self) -> Layout[Ann]  // Layout parameterized by Ann
+}
+```
+
+### Solution
+
+Each choice of the parameter becomes a **separate struct** implementing the same trait:
+
+```moonbit
+// Generic container
+pub enum Layout[A] { Text(String); Annotate(A, Layout[A]); ... }
+
+// Each interpretation fixes A concretely
+struct PrettyLayout  { layout: Layout[SyntaxCategory], prec: Int }
+struct EditorLayout  { layout: Layout[EditorAnn], prec: Int }
+struct LspLayout     { layout: Layout[LspAnn], prec: Int }
+
+// All implement TermSym — same trait, different output types
+impl TermSym for PrettyLayout with int_lit(n) {
+  { layout: annotate(Number, text(n.to_string())), prec: 5 }
+}
+impl TermSym for EditorLayout with int_lit(n) {
+  { layout: annotate({ cat: Number, node_id: ... }, text(n.to_string())), prec: 5 }
+}
+```
+
+Type ascription on `replay` selects the interpretation:
+
+```moonbit
+let pretty = (replay(term) : PrettyLayout).layout   // Layout[SyntaxCategory]
+let editor = (replay(term) : EditorLayout).layout    // Layout[EditorAnn]
+```
+
+### Providing a Trait for the Default Case
+
+The most common parameterization gets a trait for method syntax:
+
+```moonbit
+pub(open) trait Pretty {
+  to_layout(Self) -> Layout[SyntaxCategory]   // fixes A = SyntaxCategory
+}
+
+// Common case: method syntax
+term.to_layout()
+
+// Richer annotations: explicit TermSym path
+(replay(term) : EditorLayout).layout
+```
+
+### What This Solves
+
+This is the Expression Problem applied to **output type parameterization**:
+
+- **Data axis** (new annotation types): add a new struct (e.g., `DebugLayout`) — no existing code changes
+- **Operation axis** (new consumers of Layout): write generic functions over `Layout[A]` — works with any annotation
+
+### Comparison to Other Solutions
+
+| Approach | How associated type is handled |
+|----------|-------------------------------|
+| Haskell type families | `type instance Ann MyInterp = SyntaxCategory` |
+| Rust associated types | `type Ann = SyntaxCategory` inside impl block |
+| MoonBit defunctionalized | Each struct fixes `Layout[A]` to a concrete `A` |
+
+The tradeoff: you cannot write code generic over "any Pretty interpretation regardless of annotation type." Each consumer must know which struct (and therefore which `A`) it's working with. In practice this is fine — the number of annotation types is small and each consumer knows what context it's in (editor vs LSP vs plain text).
+
 ## Theoretical Boundaries
 
 A complete solution to the Expression Problem requires the ability to **abstract over types** — specifically:
@@ -355,9 +431,11 @@ Is the set of variants fixed?
    ├─ Do you need structural observation (optimization, transformation)?
    │  ├─ Yes → Two-Layer Architecture (Solution 3)
    │  └─ No  → Pure Finally Tagless (Solution 1)
-   └─ Do you need runtime-swappable interpretations?
-      ├─ Yes → Function Records / Object Algebras (Solution 4)
-      └─ No  → Finally Tagless (Solution 1)
+   ├─ Do you need runtime-swappable interpretations?
+   │  ├─ Yes → Function Records / Object Algebras (Solution 4)
+   │  └─ No  → Finally Tagless (Solution 1)
+   └─ Does interpretation output a parameterized type (Container[A])?
+      └─ Yes → Defunctionalized Associated Types (Solution 6) + Finally Tagless
 ```
 
 ## Complete Example: A Mini Language
@@ -444,6 +522,10 @@ fn program[T : ArithSym + MulSym]() -> T {
 // Direct: program[Eval]() => Eval { value: 5 }
 // Optimized: replay[Pretty](optimize(program[Ast]()))
 ```
+
+## See Also
+
+- **`moonbit-traits`** — for trait API design patterns (Self-Closed Algebra, Fixed-Type Projection, Capability Traits, Callbacks/CPS, Trait Multiplication, Newtypes, Visitor). Use when the question is "how do I design a trait API?" rather than "how do I make extensible data + operations?"
 
 ## References
 

@@ -30,16 +30,27 @@ When implementing new code, be especially careful with:
 - **Error handling**: Use Result types and pattern matching correctly
 - **Error messages**: Ensure string formats in errors match test assertion expectations exactly
 
+### 3. Deprecated Syntax Awareness
+Avoid these deprecated patterns that trigger warnings (treated as errors by CI):
+- `inspect!(...)` → use `inspect(...)` (bare form, no `!` suffix)
+- `not(expr)` → use `!expr`
+- `'\x0C'` char literal → use `'\u000C'` (use `\u` prefix, not `\x`)
+- `Char::from_int(n)` → use `n.unsafe_to_char()` (or `n.to_char()` for safe)
+- `UInt::to_int()` → use `UInt::reinterpret_as_int()`
+- `derive(Show, Eq)` on private enums whose impls are unused → remove the derive, or suppress with `warnings = "-1"`
+- `typealias` → use `pub type X = Y` or `pub using @pkg { type X }`
+- Test-only imports: use `import { "pkg" @alias } for "wbtest"` (not in the main `import` block)
+
 ## Implementation Phase
 
-### 3. Multi-File Change Coordination
+### 4. Multi-File Change Coordination
 When changes span multiple files:
 - Read all affected files first before making changes
 - Ensure import statements are correct across files
 - Verify type signatures are consistent
 - Check that `.mbti` interface files will be updated correctly
 
-### 4. Test-First Verification
+### 5. Test-First Verification
 Before marking any feature complete:
 - Run `moon test` and capture the full output
 - **For each test failure**:
@@ -51,7 +62,7 @@ Before marking any feature complete:
 - If tests use snapshot testing (`inspect`), consider whether behavior change is intentional
 - Only proceed when ALL tests pass
 
-### 5. CLI Functional Testing (if applicable)
+### 6. CLI Functional Testing (if applicable)
 If implementing a CLI tool or demo app, manually verify:
 1. Run `--help` at root level - check output formatting
 2. Run `--help` for each subcommand - verify correct help text
@@ -62,7 +73,7 @@ If implementing a CLI tool or demo app, manually verify:
 
 ## Post-Implementation Phase
 
-### 6. Interface and Format Verification
+### 7. Interface and Format Verification
 After all tests pass:
 - Run `moon info` to update `.mbti` interface files
 - Check `git diff *.mbti` to verify API changes are intentional
@@ -70,25 +81,45 @@ After all tests pass:
 - Run `moon fmt` to format code consistently
 - Run final `moon check` to ensure no lint issues
 
-### 7. Benchmark Verification (for performance-critical code)
+### 8. CI-Matching Checks (critical — do this before pushing)
+The CI uses stricter settings than bare `moon check`. Run the exact CI commands:
+```bash
+make check      # runs moon check --deny-warn (all warnings → errors)
+make fmt-check  # runs moon fmt and diffs (any formatting drift → failure)
+moon test       # or: make test (runs moon test --release)
+```
+If `make` targets aren't available, the equivalent commands are:
+```bash
+moon check --deny-warn    # warnings are errors
+moon fmt                  # then check: git diff --exit-code
+moon test --release
+```
+**Common CI failures:**
+- `derive(Show, Eq)` on private types whose impls are unused → remove derive
+- Deprecated syntax (see section 3) → use modern equivalents
+- Formatting drift → always run `moon fmt` after edits
+- Test-only imports in main import block → use `import { ... } for "wbtest"`
+
+### 9. Benchmark Verification (for performance-critical code)
 If modifying performance-critical paths:
 - Run `moon bench --release` (always with --release flag)
 - Compare results to baseline if available
 - Report any significant performance changes
 
-### 8. Performance Optimization Gate
+### 10. Performance Optimization Gate
 **If the task is a performance optimization**, use the `moonbit-perf-investigation` skill BEFORE designing any solution. That skill requires reproducing the claimed bottleneck in an isolated microbenchmark. Do not skip this — stale profiling data and O(bad) complexity are not proof of a real problem.
 
 ## Quality Checklist
 
 Before marking the task complete, verify:
 - [ ] Dependencies are healthy and build succeeds
-- [ ] All MoonBit syntax patterns are correct (no tuple destructuring errors)
+- [ ] All MoonBit syntax patterns are correct (no deprecated patterns)
 - [ ] All tests pass with exact assertion matches
 - [ ] CLI functionality tested manually (if applicable)
 - [ ] Interface files (`.mbti`) updated and reviewed
 - [ ] Code formatted with `moon fmt`
-- [ ] `moon check` passes with no warnings
+- [ ] `make check` passes (--deny-warn, zero warnings)
+- [ ] `make fmt-check` passes (no formatting drift)
 - [ ] Multi-file changes are coordinated and imports are correct
 
 ## Error Recovery
@@ -103,8 +134,11 @@ If you encounter compilation errors:
 
 This skill addresses common friction points:
 - Broken dependencies causing wasted iteration
-- MoonBit syntax issues (labelled args, tuple destructuring)
+- MoonBit syntax issues (labelled args, tuple destructuring, deprecated patterns)
 - Test assertion format mismatches
+- CI failures from `--deny-warn` treating warnings as errors
+- Formatting drift between local and CI environments
+- Test-only imports polluting main import blocks
 - Functional bugs in CLI tools (help text, flag shadowing)
 - Interface changes not being reviewed
 

@@ -231,13 +231,21 @@ RULES:
 
 WORKFLOW:
 1. Read docs/TODO.md in one call.
-2. Extract all plan file references (docs/plans/*.md paths). Check which exist in ONE batched Bash call:
+2. Fetch GitHub issues in ONE Bash call:
+   gh issue list --state open --json number,title,labels,body --limit 50 2>/dev/null || echo "gh not available"
+   Also fetch recently closed issues for cross-referencing:
+   gh issue list --state closed --json number,title,labels --limit 20 2>/dev/null || echo "gh not available"
+3. Extract all plan file references (docs/plans/*.md paths). Check which exist in ONE batched Bash call:
    for f in <list of paths>; do echo "=== $f ===" ; test -f "$f" && echo "EXISTS" || echo "MISSING" ; done
-3. Extract key terms/symbols from each TODO item. Use `moon ide` for semantic search (preferred) or batch-grep as fallback:
+4. Extract key terms/symbols from each TODO item. Use `moon ide` for semantic search (preferred) or batch-grep as fallback:
    moon ide find-references Term1 ; moon ide find-references Term2
    Fallback (for non-symbol text): echo "=== term1 ===" ; rg -l "term1" --type mbt ; ...
-4. List all files in docs/plans/ and identify orphans (not referenced in TODO.md).
-5. Classify each TODO item based on evidence gathered.
+5. List all files in docs/plans/ and identify orphans (not referenced in TODO.md).
+6. Cross-reference TODO items with GitHub issues:
+   - TODO items matching closed issues → likely "done"
+   - Open issues not in TODO.md → report as "untracked_issues"
+   - TODO items with no matching issue → note as "no-issue"
+7. Classify each TODO item based on all evidence gathered (local + GitHub).
 
 OUTPUT SCHEMA:
 {
@@ -250,11 +258,19 @@ OUTPUT SCHEMA:
       "classification": "done|active|blocked|stale|needs-human-review",
       "confidence": "high|medium|low",
       "severity": "info|warning|error",
-      "evidence": ["plan file exists: docs/plans/...", "moon ide find-references: found in editor/foo.mbt"],
+      "evidence": ["plan file exists: docs/plans/...", "moon ide find-references: found in editor/foo.mbt", "matches closed issue #12"],
       "recommendation": "archive|keep|investigate"
     }
   ],
   "orphaned_plans": ["docs/plans/file-not-in-todo.md"],
+  "untracked_issues": [
+    {
+      "number": 5,
+      "title": "Issue title not tracked in TODO.md",
+      "labels": ["enhancement"],
+      "recommendation": "add-to-todo|ignore"
+    }
+  ],
   "truncated": false,
   "tool_calls_used": 12
 }
@@ -525,7 +541,7 @@ build: {STATUS}  ({one-line summary})
 test:  {STATUS}  ({one-line summary})
 
 ### Tier 2 (Sonnet)  ← only shown if Sonnet categories were requested
-triage:     {STATUS}  ({N} done, {N} active, {N} stale, {N} orphaned plans)
+triage:     {STATUS}  ({N} done, {N} active, {N} stale, {N} orphaned plans, {N} untracked issues)
 changelog:  {STATUS}  ({N} commits → suggested bump: {minor/patch/none})
 api-review: {STATUS}  ({N} changes: {N} intentional, {N} needs review)
 doc-drift:  {STATUS}  ({N} docs checked, {N} stale references)
