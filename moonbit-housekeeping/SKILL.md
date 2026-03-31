@@ -84,6 +84,12 @@ Parse the user's argument:
 | `doc-drift` | report | sonnet | doc-drift |
 | `organize` | report | sonnet | organize (runs triage first if needed) |
 | `full` | report | both | all haiku + all sonnet |
+| `help` | — | none | Read and display TUTORIAL.md |
+| `tutorial` | — | none | Same as help |
+
+### Step 2b: Handle help/tutorial
+
+If the input is `help` or `tutorial`: read the file `TUTORIAL.md` from the same directory as this skill file and display its contents to the user. Do not dispatch any subagents. Stop here.
 
 ### Step 3: Dispatch subagents
 
