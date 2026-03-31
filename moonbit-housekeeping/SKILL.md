@@ -1,33 +1,49 @@
 ---
 name: moonbit-housekeeping
 description: >
-  Repo maintenance for MoonBit projects. Dispatches a Haiku subagent to run
-  phased mechanical checks (git state, moon fmt/check/info, build, test).
-  Default is read-only report; fix mode auto-applies safe changes.
+  Repo maintenance for MoonBit projects. Two tiers: Haiku for mechanical checks
+  (git, lint, sync, build, test), Sonnet for analysis (triage, changelog,
+  api-review, doc-drift). Default runs Haiku only; Sonnet categories are opt-in.
   Use at session start, before commits, before PRs, or for periodic cleanup.
 ---
 
 # MoonBit Housekeeping
 
-Dispatches a single Haiku subagent to run mechanical repo maintenance in 4 sequential phases. Replaces manual `/health-check` workflows.
+Two-tier repo maintenance. **Tier 1 (Haiku):** mechanical checks in 4 sequential phases — fast, cheap, runs by default. **Tier 2 (Sonnet):** bounded analysis tasks — opt-in, for release prep or periodic cleanup.
 
 ## Usage
 
-- `/moonbit-housekeeping` — full scan, report only (default)
-- `/moonbit-housekeeping fix` — full scan + auto-fix safe items
+### Tier 1 — Haiku (mechanical, ~$0.04, ~60s)
+- `/moonbit-housekeeping` — all Haiku categories, report only (default)
+- `/moonbit-housekeeping fix` — all Haiku categories + auto-fix safe items
 - `/moonbit-housekeeping git` — git state only
 - `/moonbit-housekeeping lint` — formatting + lint only
 - `/moonbit-housekeeping sync` — submodule state + mbti drift
 - `/moonbit-housekeeping build` — build smoke test only
 - `/moonbit-housekeeping test` — test suite only
 
+### Tier 2 — Sonnet (analysis, ~$1-2 each, opt-in)
+- `/moonbit-housekeeping triage` — TODO.md freshness, plan archival, orphan detection
+- `/moonbit-housekeeping changelog` — draft changelog from git log
+- `/moonbit-housekeeping api-review` — classify .mbti changes by risk/intent
+- `/moonbit-housekeeping doc-drift` — check dev docs for stale references
+
+### Combined
+- `/moonbit-housekeeping full` — all Haiku + all Sonnet categories (~$5-8)
+
 ## When to Use
 
+**Tier 1 (routine):**
 - **Start of session** — see repo state before working
 - **Before committing** — catch formatting/lint issues
 - **After pulling submodule changes** — verify nothing broke
-- **Before creating a PR** — full check
+- **Before creating a PR** — full Haiku check
 - **After a long session** — `/moonbit-housekeeping fix` to clean up drift
+
+**Tier 2 (periodic):**
+- **Release prep** — `/moonbit-housekeeping full` or `/moonbit-housekeeping changelog`
+- **Weekly cleanup** — `/moonbit-housekeeping triage` to prune stale TODOs
+- **After major refactoring** — `/moonbit-housekeeping api-review` + `/moonbit-housekeeping doc-drift`
 
 ## When NOT to Use
 
@@ -47,32 +63,41 @@ which moon
 
 If `moon` is not on PATH, report the error and stop.
 
-### Step 2: Determine mode and categories
+### Step 2: Determine mode, tier, and categories
 
 Parse the user's argument:
 
-| Input | Mode | Categories |
-|-------|------|------------|
-| (none) | report | all |
-| `fix` | fix | all |
-| `git` | report | git |
-| `lint` | report | lint |
-| `sync` | report | sync |
-| `build` | report | build |
-| `test` | report | test |
-| `fix lint` | fix | lint |
+| Input | Mode | Tier | Categories |
+|-------|------|------|------------|
+| (none) | report | haiku | git, lint, sync, build, test |
+| `fix` | fix | haiku | git, lint, sync, build, test |
+| `git` | report | haiku | git |
+| `lint` | report | haiku | lint |
+| `sync` | report | haiku | sync |
+| `build` | report | haiku | build |
+| `test` | report | haiku | test |
+| `fix lint` | fix | haiku | lint |
+| `triage` | report | sonnet | triage |
+| `changelog` | report | sonnet | changelog |
+| `api-review` | report | sonnet | api-review |
+| `doc-drift` | report | sonnet | doc-drift |
+| `full` | report | both | all haiku + all sonnet |
 
-### Step 3: Dispatch Haiku subagent
+### Step 3: Dispatch subagents
 
-Use the Agent tool with `model: haiku`. Compose the prompt by substituting `{MODE}`, `{CATEGORIES}`, and `{CWD}` into the template below.
+**If Haiku categories requested:** Dispatch Haiku subagent using the Agent tool with `model: haiku`. Use the Haiku Prompt Template below.
+
+**If Sonnet categories requested:** Dispatch Sonnet subagent(s) using the Agent tool with `model: sonnet`. Use the appropriate Sonnet Prompt Template below. Each Sonnet category is a separate agent.
+
+**If `full` mode:** Run Haiku first, then pass Haiku output as context to Sonnet agents. Dispatch all 4 Sonnet agents in parallel (they are independent).
 
 ### Step 4: Render report (Opus)
 
-Parse the JSON output from the subagent. Render the unified report format shown below. If `truncated` is true, note the scan was incomplete. If fixable items exist in report mode, suggest `/moonbit-housekeeping fix`.
+Parse the JSON output from all subagents. Render the unified report. Haiku categories first, then Sonnet categories. If `truncated` is true, note the scan was incomplete. If fixable items exist in report mode, suggest `/moonbit-housekeeping fix`.
 
 ---
 
-## Subagent Prompt Template
+## Haiku Subagent Prompt Template
 
 ~~~
 You are a housekeeping agent for a MoonBit project. Run mechanical repo checks and output structured JSON.
@@ -177,16 +202,263 @@ FIXABLE RULES:
 
 ---
 
+## Sonnet Subagent Prompt Templates
+
+Each Sonnet category is dispatched as a separate agent with `model: sonnet`.
+In `full` mode, include the Haiku JSON output as `{HAIKU_OUTPUT}` context.
+
+### Triage Prompt
+
+~~~
+You are a triage agent for a MoonBit project. Assess backlog freshness and output structured JSON.
+
+WORKING DIRECTORY: {CWD}
+HAIKU CONTEXT: {HAIKU_OUTPUT_OR_NONE}
+
+RULES:
+- Maximum 25 tool calls. Batch aggressively.
+- Output ONLY a single JSON object. No prose.
+- Separate observations from judgment.
+- If uncertain, classify as "needs-human-review", not "done".
+
+WORKFLOW:
+1. Read docs/TODO.md in one call.
+2. Extract all plan file references (docs/plans/*.md paths). Check which exist in ONE batched Bash call:
+   for f in <list of paths>; do echo "=== $f ===" ; test -f "$f" && echo "EXISTS" || echo "MISSING" ; done
+3. Extract key terms/symbols from each TODO item. Batch-grep for evidence of completion in ONE call:
+   echo "=== term1 ===" ; rg -l "term1" --type mbt ; echo "=== term2 ===" ; rg -l "term2" --type mbt ; ...
+4. List all files in docs/plans/ and identify orphans (not referenced in TODO.md).
+5. Classify each TODO item based on evidence gathered.
+
+OUTPUT SCHEMA:
+{
+  "category": "triage",
+  "status": "pass|warn|fail",
+  "findings": [
+    {
+      "id": "todo-1",
+      "subject": "TODO item text (truncated)",
+      "classification": "done|active|blocked|stale|needs-human-review",
+      "confidence": "high|medium|low",
+      "severity": "info|warning|error",
+      "evidence": ["plan file exists: docs/plans/...", "rg hit: editor/foo.mbt"],
+      "recommendation": "archive|keep|investigate"
+    }
+  ],
+  "orphaned_plans": ["docs/plans/file-not-in-todo.md"],
+  "truncated": false,
+  "tool_calls_used": 12
+}
+
+CLASSIFICATION RULES:
+- "done": evidence that the work is implemented AND plan status says complete (confidence: high)
+- "active": plan exists, no completion evidence, not marked blocked (confidence: high)
+- "blocked": plan explicitly says blocked or waiting on dependency (confidence: high)
+- "stale": no plan file, no recent git activity, no code evidence (confidence: medium)
+- "needs-human-review": mixed signals or insufficient evidence (confidence: low)
+~~~
+
+### Changelog Prompt
+
+~~~
+You are a changelog agent for a MoonBit project. Draft a changelog from git history and output structured JSON.
+
+WORKING DIRECTORY: {CWD}
+HAIKU CONTEXT: {HAIKU_OUTPUT_OR_NONE}
+
+RULES:
+- Maximum 25 tool calls. Batch aggressively.
+- Output ONLY a single JSON object. No prose.
+
+WORKFLOW:
+1. Find the base reference in ONE call:
+   echo "=== LATEST TAG ===" ; git describe --tags --abbrev=0 2>/dev/null || echo "NO_TAGS" ; echo "=== COMMIT COUNT ===" ; git rev-list --count HEAD
+2. Get commits since base in ONE call:
+   If tag exists: git log <tag>..HEAD --oneline --no-merges
+   If no tag: git log -50 --oneline --no-merges (last 50 commits)
+3. Group commits by conventional commit type (feat, fix, chore, docs, perf, refactor, test).
+   For commits without conventional prefix, infer from the message content.
+4. Draft user-facing changelog entries. Transform commit messages into readable descriptions.
+   Drop chore/internal commits unless they affect users.
+5. Suggest semantic version bump based on:
+   - feat → minor
+   - fix → patch
+   - BREAKING in any message → major
+   - Only chore/docs → no bump needed
+
+OUTPUT SCHEMA:
+{
+  "category": "changelog",
+  "status": "pass",
+  "base": {
+    "type": "tag|commit_count",
+    "value": "v0.1.0 or 50"
+  },
+  "total_commits": 23,
+  "suggested_bump": "major|minor|patch|none",
+  "bump_confidence": "high|medium|low",
+  "sections": [
+    {
+      "type": "added|changed|fixed|removed|deprecated|performance",
+      "entries": [
+        {
+          "description": "User-facing description",
+          "commits": ["abc1234"],
+          "breaking": false
+        }
+      ]
+    }
+  ],
+  "skipped_commits": ["def5678 chore: update submodules"],
+  "truncated": false,
+  "tool_calls_used": 5
+}
+~~~
+
+### API Review Prompt
+
+~~~
+You are an API review agent for a MoonBit project. Classify .mbti interface changes by risk and intent.
+
+WORKING DIRECTORY: {CWD}
+HAIKU CONTEXT: {HAIKU_OUTPUT_OR_NONE}
+
+RULES:
+- Maximum 25 tool calls. Batch aggressively.
+- Output ONLY a single JSON object. No prose.
+- Separate observations (what changed) from judgment (is it intentional).
+- If HAIKU_CONTEXT includes mbti diff, use it. Do NOT re-run moon info.
+
+WORKFLOW:
+1. If no HAIKU_CONTEXT with mbti diff: run `moon info` then `git diff -- '*.mbti'` in ONE call.
+   If HAIKU_CONTEXT has mbti diff: skip to step 2.
+2. Parse the diff. For each changed .mbti file, identify:
+   - Added public types/methods/functions
+   - Removed public types/methods/functions
+   - Changed signatures (parameter types, return types)
+3. For each change, assess intent:
+   - Read the corresponding .mbt source file to understand context (batch reads).
+   - Check recent git log for the file to understand what work is in progress.
+4. Classify each change.
+
+OUTPUT SCHEMA:
+{
+  "category": "api-review",
+  "status": "pass|warn|fail",
+  "findings": [
+    {
+      "file": "editor/pkg.generated.mbti",
+      "change_type": "added|removed|modified",
+      "symbol": "pub fn SyncEditor::new_method(self) -> Unit",
+      "classification": "intentional|accidental|needs-review",
+      "confidence": "high|medium|low",
+      "severity": "info|warning|error",
+      "evidence": ["recent commit abc1234 added this method", "no related changes in source"],
+      "breaking": false
+    }
+  ],
+  "summary": {
+    "added": 3,
+    "removed": 0,
+    "modified": 1,
+    "breaking_changes": 0
+  },
+  "truncated": false,
+  "tool_calls_used": 10
+}
+
+CLASSIFICATION RULES:
+- "intentional": change matches recent work, source file has corresponding implementation
+- "accidental": no corresponding source change, likely drift from moon info regeneration
+- "needs-review": unclear intent, mixed signals
+- Removed public symbols are always severity "warning" or "error" (potential breaking change)
+~~~
+
+### Doc Drift Prompt
+
+~~~
+You are a doc-drift agent for a MoonBit project. Check development docs for stale references.
+
+WORKING DIRECTORY: {CWD}
+HAIKU CONTEXT: {HAIKU_OUTPUT_OR_NONE}
+
+RULES:
+- Maximum 25 tool calls. Batch aggressively.
+- Output ONLY a single JSON object. No prose.
+- ONLY check development docs, READMEs, and plan references.
+- Do NOT check docs/architecture/ — those describe principles, not symbols.
+- Do NOT check submodule docs — different ownership.
+
+SCOPE:
+- docs/development/*.md
+- docs/decisions/*.md
+- docs/TODO.md (file/path references only)
+- README.md, AGENTS.md
+- docs/plans/*.md (active plans only, not archived)
+
+WORKFLOW:
+1. List all in-scope doc files in ONE Bash call:
+   echo "=== DEV ===" ; ls docs/development/*.md 2>/dev/null ;
+   echo "=== DECISIONS ===" ; ls docs/decisions/*.md 2>/dev/null ;
+   echo "=== PLANS ===" ; ls docs/plans/*.md 2>/dev/null ;
+   echo "=== ROOT ===" ; ls README.md AGENTS.md 2>/dev/null
+2. Read each doc file (batch where possible — multiple Read calls are OK).
+3. Extract concrete references: file paths, package names, function names, command examples.
+   Ignore principle-level statements ("the framework uses X pattern").
+4. Verify references exist in ONE batched Bash call:
+   for ref in <paths>; do echo "=== $ref ===" ; test -e "$ref" && echo "EXISTS" || echo "MISSING" ; done
+5. For function/type references, batch-grep:
+   for sym in <symbols>; do echo "=== $sym ===" ; rg -l "$sym" --type mbt | head -3 ; done
+6. Report drift.
+
+OUTPUT SCHEMA:
+{
+  "category": "doc-drift",
+  "status": "pass|warn|fail",
+  "findings": [
+    {
+      "doc_file": "docs/development/workflow.md",
+      "reference": "framework/core/types.mbt",
+      "reference_type": "file_path|symbol|command|package",
+      "classification": "valid|stale|renamed|removed",
+      "confidence": "high|medium|low",
+      "severity": "info|warning|error",
+      "evidence": ["file does not exist", "similar file at framework/core/node.mbt"],
+      "recommendation": "update reference|remove reference|investigate"
+    }
+  ],
+  "docs_checked": 12,
+  "references_checked": 45,
+  "truncated": false,
+  "tool_calls_used": 15
+}
+
+CLASSIFICATION RULES:
+- "valid": reference target exists and matches description (confidence: high)
+- "stale": reference target does not exist, no obvious rename (confidence: high)
+- "renamed": reference target missing but similar name found nearby (confidence: medium)
+- "removed": reference target and related code completely gone (confidence: high)
+~~~
+
+---
+
 ## Report Format (Opus renders this from JSON)
 
 ```
 ## Housekeeping Report
 
+### Tier 1 (Haiku)
 git:   {STATUS}  ({one-line summary})
 lint:  {STATUS}  ({one-line summary})
 sync:  {STATUS}  ({one-line summary})
 build: {STATUS}  ({one-line summary})
 test:  {STATUS}  ({one-line summary})
+
+### Tier 2 (Sonnet)  ← only shown if Sonnet categories were requested
+triage:     {STATUS}  ({N} done, {N} active, {N} stale, {N} orphaned plans)
+changelog:  {STATUS}  ({N} commits → suggested bump: {minor/patch/none})
+api-review: {STATUS}  ({N} changes: {N} intentional, {N} needs review)
+doc-drift:  {STATUS}  ({N} docs checked, {N} stale references)
 ```
 
 If any category has warnings or errors, add a Details section:
@@ -198,14 +470,16 @@ If any category has warnings or errors, add a Details section:
 - warning: `editor/foo.mbt` needs formatting (fixable)
 - warning: unused import `immut/hashset` in `event-graph-walker/internal/causal_graph/moon.pkg`
 
-**sync (WARN)**
-- warning: `loom` submodule is 3 commits behind origin/main
-- info: `event-graph-walker` submodule is clean
+**triage (WARN)**
+- warning: TODO item "add X feature" appears done (high confidence) — recommend archive
+- info: 3 orphaned plans in docs/plans/ not referenced in TODO.md
 ```
 
 If MODE was "fix", list what was auto-fixed.
 If MODE was "report" and fixable items exist:
 > Run `/moonbit-housekeeping fix` to auto-fix {N} items.
+
+For Sonnet findings with `confidence: low` or `classification: needs-human-review`, flag them explicitly so the user knows to verify.
 
 ## Fix Mode Whitelist
 
