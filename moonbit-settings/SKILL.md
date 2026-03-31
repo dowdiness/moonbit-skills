@@ -161,7 +161,7 @@ CLAUDE.md is loaded into every request. Embedding fixed MoonBit conventions inli
 Generate sections in this EXACT order. The file should be lean — project-specific content only, shared conventions @-imported.
 
 1. `# Project title` — one-line description
-2. `@~/.claude/moonbit-base.md` — imports all shared MoonBit conventions (Language Notes, Conventions, Code Changes, Code Review Standards, Development Workflow, Git & PR Workflow)
+2. `@~/.claude/moonbit-base.md` — imports all shared MoonBit conventions (Language Notes, Code Search, Conventions, Code Changes, Code Review Standards, Development Workflow, Git & PR Workflow)
 3. `## Project Structure` — auto-detected submodules + packages, with archive path convention
 4. `## Commands` — auto-detected per-module commands
 5. `## Documentation` — auto-detected from docs/ structure, with archive rule
@@ -184,6 +184,22 @@ Write the shared base file once. Skip if already exists.
 - Blackbox tests cannot construct internal structs — use whitebox tests or expose constructors
 - For cross-target builds, use per-file conditional compilation rather than `supported-targets` in moon.pkg.json
 - Error handling syntax: use `Unit!Error` or `T!Error` for fallible return types. Error propagation uses `!` suffix on calls, not `raise` keyword. Always verify MoonBit syntax against recent compiler behavior before committing.
+
+## MoonBit Code Search
+
+Prefer `moon ide` over grep/glob for MoonBit-specific code search. These commands use the compiler's semantic understanding, not text matching.
+
+```bash
+moon ide peek-def SyncEditor              # Go-to-definition with context
+moon ide peek-def -loc editor/foo.mbt:5   # Definition at cursor position
+moon ide find-references SyncEditor       # All usages across codebase
+moon ide outline editor/                  # Package structure overview
+moon ide doc "String::*rev*"              # API discovery with wildcards
+```
+
+Symbol syntax: `Symbol`, `@pkg.Symbol`, `Type::method`, `@pkg.Type::method`
+
+When to use: finding definitions, tracing usages, understanding package APIs, discovering methods. Falls back to grep only for non-MoonBit files or cross-language patterns.
 
 ## MoonBit Conventions
 
