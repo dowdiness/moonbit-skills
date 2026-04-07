@@ -24,7 +24,10 @@ Reference this skill before writing MoonBit code. Using deprecated syntax causes
 | `let UPPER_CASE` at module level | `let lower_case` | Uppercase requires `const`, not `let` |
 | `not(expr)` | `!expr` | Use prefix `!` operator |
 | `else { ... }` in for-loop nobreak | `nobreak { ... }` | `else` deprecated for nobreak blocks |
-| `loop (xs, 0) { ... => continue ... }` | `for x in xs; acc = 0 { continue ... }` | `loop` keyword being removed |
+| `loop (xs, 0) { ... => continue ... }` | `for` + `match` with state variables | `loop` keyword being removed |
+| `derive(Show)` | `derive(Debug)` + manual `impl Show` if needed | `derive(Show)` warns [0027]; `Show` trait itself is NOT deprecated — `inspect()` still requires it. Use `derive(Debug)` for debugging; add manual `impl Show` for `inspect`/`to_string` (v0.9) |
+| `lexmatch`/`lexmatch?` | `s =~ re"..."` regex expressions | Planned removal; use stable regex syntax (v0.9) |
+| `@immut/array` | `@immut/vector` | `immut/vector` replaces `immut/array` with better performance (v0.9) |
 
 ## API Patterns
 
@@ -44,7 +47,16 @@ loop (xs, 0) {
   (More(x, rest), acc) => continue (rest, x + acc)
 }
 
-// PREFERRED — for-in with additional loop variables (functional style)
+// REPLACEMENT — for + match (direct translation of loop's multi-value pattern matching)
+// Each loop state variable becomes a `for` binding; pattern arms use break/continue
+for xs = xs, acc = 0 {
+  match xs {
+    Empty => break acc
+    More(x, rest) => continue rest, x + acc
+  }
+}
+
+// PREFERRED — for-in with additional loop variables (when iterating a collection)
 for x in xs; sum = 0 {
   continue sum + x
 } nobreak {
@@ -53,7 +65,6 @@ for x in xs; sum = 0 {
 
 // VALID — C-style for with multiple bindings
 for i = 0, acc = 0; i < n; i = i + 1 {
-  // use continue with values to update bindings
   continue i + 1, acc + xs[i]
 } nobreak { acc }
 
@@ -63,6 +74,15 @@ for x in xs {
   acc += x
 }
 ```
+
+### When to use which replacement
+
+| `loop` pattern | Replace with |
+|---|---|
+| Pattern matching on a recursive structure (linked list, tree) | `for` + `match` with state variables |
+| Iterating over a collection with accumulator | `for x in xs; acc = 0 { ... }` |
+| Index-based iteration with state | C-style `for i = 0, acc = 0; ...` |
+| Simple aggregation, no pattern matching needed | `for x in xs` with `let mut` |
 
 ## How This Skill Is Maintained
 

@@ -18,6 +18,9 @@
 | Visibility default         | `pub`                               | `pub(all)` unless needed      |
 | Foreign trait + foreign type | newtype wrapper                   | direct impl (orphan rule)     |
 | Unimplemented placeholder  | `...`                               | leaving in committed code     |
+| Debugging derive           | `derive(Debug)` + manual `impl Show` for `inspect` | `derive(Show)` warns [0027] |
+| Regex matching             | `s =~ re"pattern"`                  | `lexmatch`/`lexmatch?` (deprecated) |
+| Reduce nesting in DSLs     | `<\|` reverse pipeline              | deeply nested parentheses     |
 
 ## MoonBit Code Search
 
@@ -68,6 +71,11 @@ grep -rn '() => {}' <pkg>/*.mbt                      # Empty callback anti-patte
   }
   ```
 - **Visibility:** `pub` exposes a symbol to direct dependents only. `pub(all)` exposes it transitively to all downstream packages. `pub(open)` on enums allows downstream packages to add variants. Use `pub` by default; only use `pub(all)` for types/functions that downstream-of-downstream consumers need, and `pub(open)` only for intentionally extensible enums.
+- **Constructor aliases:** `using @pkg { type T }` imports a constructor alias so `T(args)` works instead of `@pkg.T(args)`. `#alias(Name)` on a type definition creates a local alias. Both work with tuple structs, structs with custom constructors, and single-constructor errors.
+  ```moonbit
+  using @ref { type Ref }
+  let r = Ref(42)             // instead of @ref.Ref(42)
+  ```
 - **Naming:** `snake_case` for functions, methods, variables, and modules. `PascalCase` for types, enums, and constructors. `SCREAMING_SNAKE_CASE` for `const` constants.
 
 ## Control Flow
@@ -97,6 +105,22 @@ grep -rn '() => {}' <pkg>/*.mbt                      # Empty callback anti-patte
   let mut acc = 0
   for i in 0..<n { acc += xs[i] }
   ```
+- **Regex matching:** Use `s =~ re"pattern"` for regex. Patterns compose with `+` (concat), `|` (alternation), `as name` (captures), and `before=`/`after~` (surrounding text bindings).
+  ```moonbit
+  let s = "==abc=="
+  let _ = s =~ re"abc"                                      // simple match
+  let _ = s =~ (re"a" + re"bc", )                           // pattern composition
+  let _ = s =~ (((re"x" as x) | re"b") + re"bc", before=y, after~) // captures + context
+  ```
+- **Reverse pipeline `<|`:** Reduces nesting in DSL/view code. `f <| args` is equivalent to `f(args)`.
+  ```moonbit
+  fn view() -> Html {
+    div <| [
+      text("hello"),
+      ul <| [ li("item 1"), li("item 2") ],
+    ]
+  }
+  ```
 - **StringView/ArrayView patterns:** Use `.view()` for prefix/suffix matching with `match`:
   ```moonbit
   match s.view() {
@@ -116,7 +140,7 @@ grep -rn '() => {}' <pkg>/*.mbt                      # Empty callback anti-patte
     y : Int
 
     fn new(x~ : Int, y? : Int) -> MyStruct  // declaration inside struct
-  } derive(Show)
+  } derive(Debug)
 
   fn MyStruct::new(x~ : Int, y? : Int = x) -> MyStruct {  // implementation
     { x, y }
@@ -171,9 +195,17 @@ Before designing any performance optimization, write a microbenchmark that **rep
 2. `moon check` — Lint
 3. `moon test` — Run tests
 4. `moon test --update` — Update snapshots (if behavior changed)
-5. `moon info` — Update `.mbti` interfaces
-6. Check `git diff *.mbti` — Verify API changes
-7. `moon fmt` — Format
+5. `moon prove` — Verify `proof_ensure` properties (if `proof-enabled: true` in moon.pkg)
+6. `moon info` — Update `.mbti` interfaces
+7. Check `git diff *.mbti` — Verify API changes
+8. `moon fmt` — Format
+
+### Workspace Commands
+
+For multi-project workspaces (monorepos with multiple `moon.mod.json`):
+- `moon work init` — Initialize a workspace
+- `moon work use <path>` — Add a project to the workspace
+- `moon work sync` — Sync dependencies across workspace members
 
 ## Git & PR Workflow
 

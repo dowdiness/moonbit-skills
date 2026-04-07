@@ -37,6 +37,7 @@ Avoid these deprecated patterns that trigger warnings (treated as errors by CI):
 - `'\x0C'` char literal → use `'\u000C'` (use `\u` prefix, not `\x`)
 - `Char::from_int(n)` → use `n.unsafe_to_char()` (or `n.to_char()` for safe)
 - `UInt::to_int()` → use `UInt::reinterpret_as_int()`
+- `derive(Show)` → deprecated [0027]; use `derive(Debug)` for debugging, add manual `impl Show` if `inspect()` is needed
 - `derive(Show, Eq)` on private enums whose impls are unused → remove the derive, or suppress with `warnings = "-1"`
 - `typealias` → use `pub type X = Y` or `pub using @pkg { type X }`
 - Test-only imports: use `import { "pkg" @alias } for "wbtest"` (not in the main `import` block)
@@ -95,6 +96,7 @@ moon fmt                  # then check: git diff --exit-code
 moon test --release
 ```
 **Common CI failures:**
+- `derive(Show)` is deprecated [0027] — use `derive(Debug)`, add manual `impl Show` only where `inspect()` requires it
 - `derive(Show, Eq)` on private types whose impls are unused → remove derive
 - Deprecated syntax (see section 3) → use modern equivalents
 - Formatting drift → always run `moon fmt` after edits
