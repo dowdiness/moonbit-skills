@@ -22,7 +22,7 @@ Design pattern for creating type-safe, encapsulated wrapper types in MoonBit pub
 ///| Type-safe text position (0-indexed, non-negative)
 pub(all) struct Pos {
   priv value : Int
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///| Factory function with validation
 pub fn Pos::at(value : Int) -> Pos {
@@ -43,7 +43,7 @@ pub fn Pos::value(self : Pos) -> Int {
 | `priv` field | Internals hidden from users |
 | Factory function | Controlled construction with validation |
 | Accessors | Controlled read access to internals |
-| `derive(Show, Eq)` | Standard traits still work |
+| `derive(Debug, Eq)` | Standard traits still work |
 
 ## Important: Tuple Structs Don't Work
 
@@ -66,7 +66,7 @@ pub(all) struct Pos {
 ```moonbit
 pub(all) struct UserId {
   priv id : String
-} derive(Show, Eq, Hash)
+} derive(Debug, Eq, Hash)
 
 pub fn UserId::new(id : String) -> UserId? {
   if id.length() > 0 { Some({ id, }) } else { None }
@@ -82,7 +82,7 @@ pub fn UserId::to_string(self : UserId) -> String {
 ```moonbit
 pub(all) struct Version {
   priv frontier : @internal.Frontier
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 pub fn Version::from_frontier(frontier : @internal.Frontier) -> Version {
   { frontier, }
@@ -98,7 +98,7 @@ pub fn Version::to_frontier(self : Version) -> @internal.Frontier {
 ```moonbit
 pub(all) struct Change {
   priv op : @internal.Op
-} derive(Show)
+} derive(Debug)
 
 pub fn Change::from_op(op : @internal.Op) -> Change {
   { op, }
@@ -143,7 +143,7 @@ For types with multiple fields, use regular struct:
 pub(all) struct Range {
   start : Pos
   end : Pos
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 pub fn Range::new(start : Pos, end : Pos) -> Range {
   { start, end }
@@ -163,7 +163,7 @@ Use transparent tuple structs when:
 
 ```moonbit
 // Transparent - internal value accessible
-pub(all) struct Frontier(Array[Int]) derive(Show, Eq)
+pub(all) struct Frontier(Array[Int]) derive(Debug, Eq)
 ```
 
 ## Summary
@@ -173,5 +173,5 @@ pub(all) struct Frontier(Array[Int]) derive(Show, Eq)
 | Hide internals | `priv` field in named struct |
 | Enforce invariants | Factory function with validation |
 | Type safety | Distinct type prevents mixing with primitives |
-| Trait derivation | `derive(Show, Eq, ...)` works normally |
+| Trait derivation | `derive(Debug, Eq, ...)` works normally |
 | Power user access | Optional `advanced()` escape hatch |

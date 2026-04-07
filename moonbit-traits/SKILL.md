@@ -424,7 +424,7 @@ Pattern 6 (Newtypes) gives the concept; this section gives the MoonBit implement
 ```moonbit
 pub(all) struct Pos {
   priv value : Int   // hidden from outside
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 pub fn Pos::at(value : Int) -> Pos {
   { value: if value < 0 { 0 } else { value } }
