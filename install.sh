@@ -12,3 +12,6 @@ for dir in "$REPO_DIR"/*/; do
   ln -sfn "$dir" "$SKILLS_DIR/$name"
   echo "Linked: $name"
 done
+
+ln -sf "$REPO_DIR/moonbit-base.md" "$HOME/.claude/moonbit-base.md"
+echo "Linked: moonbit-base.md"

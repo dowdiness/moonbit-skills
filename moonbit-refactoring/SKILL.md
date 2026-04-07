@@ -284,3 +284,30 @@ Steps:
 1. Use `moon ide find-references <symbol>` to find all call sites of `a` and `B`.
 2. Replace them with `@package_a.a` and `@package_a.B`.
 3. Remove the `using` statement and run `moon check`.
+
+## Deprecated Syntax Quick Reference
+
+Check code against these before committing. CI with `-w @a` will fail on deprecated patterns.
+
+| Deprecated | Replacement |
+|-----------|-------------|
+| `inspect!(expr)` | `inspect(expr)` |
+| `map.size()` | `map.length()` |
+| `opt.or(default)` | `opt.unwrap_or(default)` |
+| `opt.is_some()` / `opt.is_none()` | `opt is Some(_)` / `opt is None` |
+| `text.substring(start=i, end=j)` | `text[i:j].to_string()` |
+| `pub typealias X = Y` | `pub type X = Y` |
+| `let UPPER` at module level | `let lower` (uppercase needs `const`) |
+| `not(expr)` | `!expr` |
+| `else { }` in for nobreak | `nobreak { }` |
+| `loop (xs, 0) { ... }` | `for x in xs; acc = 0 { ... }` |
+| `tuple._` | `tuple.0` |
+
+### API Gotchas
+
+| Don't | Do | Why |
+|-------|-----|-----|
+| `map[key]` for lookup | `map.get(key)` | `[]` panics on missing key |
+| `x.ln()` | `@math.ln(x)` | No method on Double |
+
+Full reference: `/moonbit-deprecated-syntax`

@@ -39,10 +39,10 @@ Scan from working directory:
 find . -name "moon.mod.json" -not -path "./.worktrees/*"
 
 # Find all packages per module
-find . -name "moon.pkg.json" -not -path "./.worktrees/*"
+find . \( -name "moon.pkg.json" -o -name "moon.pkg" \) -not -path "./.worktrees/*" -not -path "./.mooncakes/*"
 
 # Detect test files
-find . -name "*_test.mbt" -o -name "*_wbtest.mbt" -o -name "*_benchmark.mbt" | head -20
+find . \( -name "*_test.mbt" -o -name "*_wbtest.mbt" -o -name "*_benchmark.mbt" \) -not -path "./.mooncakes/*" | head -20
 
 # Check for git submodules
 cat .gitmodules 2>/dev/null
@@ -167,87 +167,15 @@ Generate sections in this EXACT order. The file should be lean — project-speci
 5. `## Documentation` — auto-detected from docs/ structure, with archive rule
 6. `## Key Facts` — project-specific facts (CRDT algorithm, language, ground truth, etc.)
 
-### Generate `~/.claude/moonbit-base.md` (if not exists)
+### `~/.claude/moonbit-base.md`
 
-Write the shared base file once. Skip if already exists.
+This file is managed by `dowdiness/moonbit-skills`. It is deployed as a symlink by `install.sh` — do not recreate it manually.
 
-```markdown
-# MoonBit Base Conventions
-
-## MoonBit Language Notes
-
-- `pub` vs `pub(all)` visibility modifiers have different semantics — check current docs before using
-- `._` syntax is deprecated, use `.0` for tuple access
-- `try?` does not catch `abort` — use explicit error handling
-- `?` operator is not always supported — use explicit match/error handling when it fails
-- `ref` is a reserved keyword — do not use as variable/field names
-- Blackbox tests cannot construct internal structs — use whitebox tests or expose constructors
-- For cross-target builds, use per-file conditional compilation rather than `supported-targets` in moon.pkg.json
-- Error handling syntax: use `Unit!Error` or `T!Error` for fallible return types. Error propagation uses `!` suffix on calls, not `raise` keyword. Always verify MoonBit syntax against recent compiler behavior before committing.
-
-## MoonBit Code Search
-
-Prefer `moon ide` over grep/glob for MoonBit-specific code search. These commands use the compiler's semantic understanding, not text matching.
+If `~/.claude/moonbit-base.md` does not exist, run the install script:
 
 ```bash
-moon ide peek-def SyncEditor              # Go-to-definition with context
-moon ide peek-def -loc editor/foo.mbt:5   # Definition at cursor position
-moon ide find-references SyncEditor       # All usages across codebase
-moon ide outline editor/                  # Package structure overview
-moon ide doc "String::*rev*"              # API discovery with wildcards
-```
-
-Symbol syntax: `Symbol`, `@pkg.Symbol`, `Type::method`, `@pkg.Type::method`
-
-When to use: finding definitions, tracing usages, understanding package APIs, discovering methods. Falls back to grep only for non-MoonBit files or cross-language patterns.
-
-## MoonBit Conventions
-
-- **Block-style:** Code organized in `///|` separated blocks
-- **Testing:** Use `inspect` for snapshots, `@qc` for properties
-- **Files:** `*_test.mbt` (blackbox), `*_wbtest.mbt` (whitebox), `*_benchmark.mbt`
-- **Format:** Always `moon info && moon fmt` before committing
-- **Trait impl:** `pub impl Trait for Type with method(self) { ... }` — one method per impl block
-- **Arrow functions:** `() => expr`, `() => { stmts }`. Empty body: `() => ()` not `() => {}`
-
-## Code Changes
-
-- Before suggesting code removal, check if symbols are re-exported as public API for downstream consumers. Do not delete structs/types that appear unused internally but may be part of the library's public interface.
-
-## Code Review Standards
-
-- Never dismiss a review request — always do a thorough line-by-line review even if changes seem minor
-- Check for: integer overflow, zero/negative inputs, boundary validation, generation wrap-around
-- Do not suggest deleting public API types (Id structs, etc.) as 'unused' — they may be needed by downstream consumers
-- Verify method names match actual API before writing tests (e.g., check if it's `insert` vs `add_local_op`)
-
-## Development Workflow
-
-### Performance Optimization Rule
-
-Before designing any performance optimization, write a microbenchmark that **reproduces the claimed bottleneck** in isolation. If the benchmark can't demonstrate the problem, stop and re-evaluate. Stale profiling data and O(bad) complexity are not proof of a real problem.
-
-### Incremental Edit Rule
-
-**CRITICAL:** After every file edit, run `moon check` before proceeding to the next file. If there are errors, fix them immediately before continuing with the plan.
-
-### Standard Workflow
-
-1. Make edits
-2. `moon check` — Lint
-3. `moon test` — Run tests
-4. `moon test --update` — Update snapshots (if behavior changed)
-5. `moon info` — Update `.mbti` interfaces
-6. Check `git diff *.mbti` — Verify API changes
-7. `moon fmt` — Format
-
-## Git & PR Workflow
-
-- Always check if git is initialized before running git commands
-- After rebase operations, verify files are in the correct directories
-- When asked to 'commit remaining files', interpret generously even if phrasing is unclear
-- When merging PRs, always verify CI status is actually passing (not skipped) before proceeding. Never represent CI as green if any checks were skipped or failed.
-- After rebasing or refactoring, verify file paths haven't shifted unexpectedly. Run `git diff --stat` to confirm only intended files changed.
+git clone https://github.com/dowdiness/moonbit-skills
+cd moonbit-skills && bash install.sh
 ```
 
 ### Auto-Detected Section: Commands

@@ -16,3 +16,13 @@ for link in "$SKILLS_DIR"/*/; do
       ;;
   esac
 done
+
+if [ -L "$HOME/.claude/moonbit-base.md" ]; then
+  target="$(readlink -f "$HOME/.claude/moonbit-base.md")"
+  case "$target" in
+    "$REPO_DIR"/*)
+      rm "$HOME/.claude/moonbit-base.md"
+      echo "Removed: moonbit-base.md"
+      ;;
+  esac
+fi

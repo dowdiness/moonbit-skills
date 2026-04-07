@@ -415,6 +415,44 @@ If the operation does not vary by type, it does not need to be a trait.
 
 The overarching principle: **embrace the concreteness.** Without type parameters, your traits describe relationships between `Self` and specific, known types. This is not a weakness to work around but a design constraint that pushes toward clear, discoverable, domain-grounded interfaces.
 
+## Opaque Types (Newtype Implementation Details)
+
+Pattern 6 (Newtypes) gives the concept; this section gives the MoonBit implementation.
+
+### Basic Opaque Type
+
+```moonbit
+pub(all) struct Pos {
+  priv value : Int   // hidden from outside
+} derive(Show, Eq)
+
+pub fn Pos::at(value : Int) -> Pos {
+  { value: if value < 0 { 0 } else { value } }
+}
+
+pub fn Pos::value(self : Pos) -> Int { self.value }
+```
+
+| Component | Purpose |
+|-----------|---------|
+| `pub(all) struct` | Type visible everywhere |
+| `priv` field | Internals hidden from users |
+| Factory function | Controlled construction with validation |
+| Accessors | Controlled read access |
+
+**Important:** `priv` doesn't work with tuple structs. Use named fields.
+
+### Patterns by Use Case
+
+- **Simple wrapper** (validation): `UserId::new(id) -> UserId?`
+- **Opaque wrapper** (hide complex type): `Version::from_frontier(f) -> Version`
+- **Rich API wrapper**: expose semantic methods (`is_insert`, `get_text`), not raw access
+- **Escape hatch**: `TextDoc::advanced(self) -> @internal.Document` for power users
+
+### When NOT to Use
+
+Use transparent types when internals should be public, no invariants to enforce, or used only internally.
+
 ## See Also
 
 - **`moonbit-expression-problem`** — for extensible data + operations (Finally Tagless, Two-Layer Architecture, Function Records). Use when the question is "how do I add new variants AND new operations?" rather than "how do I design a trait API?"

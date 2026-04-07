@@ -99,6 +99,16 @@ Suggest: profile the full pipeline to find the actual bottleneck instead.
 ### Problem exists but smaller than claimed
 Report the actual cost. Let the user decide if it's worth optimizing. Often it isn't.
 
+## Step 6: Benchmark the Deployment Target
+
+`moon bench --release` runs on the wasm-gc backend by default. MoonBit has three backends with very different performance characteristics:
+
+- **JS**: V8's GC is fast for short-lived objects. Struct layout matters — wrapper objects and property dereferences have real cost. Best for measuring allocation-related optimizations.
+- **wasm-gc**: GC-managed, no per-assignment RC. May optimize away single-field struct indirection. Middle ground.
+- **C (native)**: Uses reference counting (`moonbit_incref`/`moonbit_decref`) on every pointer assignment. RC overhead can dominate and mask other differences. Can be slower than JS for allocation-heavy patterns.
+
+A result that shows "no difference" on wasm-gc may show 10-15% on JS, or vice versa. C native results may be dominated by RC overhead. **The deployment target is the one that matters.**
+
 ## Anti-Patterns
 
 | Anti-pattern | Why it's wrong |
@@ -108,6 +118,93 @@ Report the actual cost. Let the user decide if it's worth optimizing. Often it i
 | "Let me design the ideal solution first" | You're optimizing for intellectual satisfaction, not user value. Measure first. |
 | "The spec review will catch issues" | Spec reviews check solution correctness, not problem validity. |
 | "It's architecturally cleaner anyway" | That's a refactoring argument, not a performance argument. If the goal is cleanliness, say so — don't dress it up as optimization. |
+
+## MoonBit-Specific Cost Model Notes
+
+Known codegen facts that affect optimization decisions. Verify with `moon build --target js` (or wasm) before assuming — compiler behavior changes across versions.
+
+### Single-field tuple structs are unboxed (JS target, verified 2026-04-02)
+
+A single-field tuple struct compiles to the inner value directly — no wrapper object, no indirection.
+
+```moonbit
+struct Wrapper(@hashmap.HashMap[Int, String])   // tuple struct: 1 field
+struct Named { tokens : @hashmap.HashMap[Int, String] }  // named struct
+```
+
+**JS output:**
+```js
+// Wrapper::new() — returns bare HashMap, no wrapper allocation
+function Wrapper_new() { return HashMap_new(8); }
+// Wrapper::get() — self IS the HashMap
+function Wrapper_get(self, key) { return HashMap_get(self, key); }
+
+// Named::new() — allocates wrapper object
+function Named_new() { return new Named(HashMap_new(8)); }
+// Named::get() — dereferences .tokens
+function Named_get(self, key) { return HashMap_get(self.tokens, key); }
+```
+
+The compiler also rejects `#valtype` on single-field tuple structs: *"Value type is not allowed for new type/tuple struct with one element (which is guaranteed unboxed at runtime)."*
+
+**Tradeoff:** Tuple struct fields cannot be `priv`. If the struct is `pub` (not `pub(all)`), external packages can't construct it anyway, so the visibility loss is package-internal only.
+
+**When it matters:** Wrapper types on hot paths (interners, caches, context objects) called hundreds of times per parse — saves one allocation + one dereference per call.
+
+**Benchmark results (verified 2026-04-02, controlled side-by-side in same process):**
+
+Two-level HashMap (Interner pattern: `HashMap[Int, HashMap[Int, String]]`, 110 calls/iter):
+
+| Target | Named struct | Tuple struct | Speedup |
+|--------|-------------|-------------|---------|
+| JS (Node v24) | 5.84 µs/iter | 5.62 µs/iter | **~4%** |
+| wasm-gc | 25.0 µs/iter | 25.9 µs/iter | **noise** |
+| C (native, -O2) | 41.5 µs/iter | 43.0 µs/iter | **noise** |
+
+Single-level HashMap (NodeInterner pattern: `HashMap[Int, Int]`, 110 calls/iter):
+
+| Target | Named struct | Tuple struct | Speedup |
+|--------|-------------|-------------|---------|
+| JS (Node v24) | 1.33 µs/iter | 1.34 µs/iter | **noise** |
+
+**Key finding:** Tuple struct unboxing only helps on JS, and only for complex access patterns (two-level maps). For single-level HashMap wrappers, V8's JIT optimizes away the property dereference after warmup.
+
+**Methodology note:** Earlier separate-process benchmarks showed ~13% for the two-level case, but controlled side-by-side measurement in the same process shows ~4%. Separate processes introduce JIT warmup and memory layout differences that inflate the gap. Always prefer in-process side-by-side benchmarks.
+
+**Why C native is slowest:** The C backend uses reference counting (`moonbit_incref`/`moonbit_decref`) on every pointer assignment. RC overhead dominates both variants equally.
+
+**Why wasm-gc is middle:** GC-managed (no per-assignment RC), but wasm-gc runtime has its own overhead.
+
+**Takeaway:** The JS target is where struct layout optimizations matter most — and Canopy targets the web. Always benchmark the deployment target, not just `moon bench` (which runs wasm-gc by default).
+
+### Benchmarking JS output from MoonBit
+
+`moon bench` only runs on the wasm-gc target. To benchmark JS codegen:
+
+1. Build: `moon build --target js`
+2. Find the output: `find _build/js -name "*.js"`
+3. Extract the generated functions (they're top-level, not exported)
+4. Write a Node.js harness that calls them with `performance.now()`:
+
+```bash
+# Strip the IIFE at the end, add timing harness
+head -n <line_before_IIFE> _build/js/.../main.js > bench.js
+cat >> bench.js << 'EOF'
+const { performance } = require('perf_hooks');
+const t0 = performance.now();
+for (let i = 0; i < N; i++) fn_under_test();
+console.log(((performance.now() - t0) / N * 1000).toFixed(2) + ' µs/iter');
+EOF
+node bench.js
+```
+
+This technique caught the 13% tuple struct win that was invisible to `moon bench`.
+
+### `#valtype` on named structs requires non-abstract field types
+
+`#valtype` on a named struct with an abstract type field (e.g., `HashMap` from another package) is rejected: *"Value type is not allowed for using abstract type as field type."*
+
+This means `#valtype` is only useful for named structs whose fields are all concrete types from the same package or primitives.
 
 ## Integration with Brainstorming
 
