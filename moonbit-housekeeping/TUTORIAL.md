@@ -1,199 +1,78 @@
 # Housekeeping Tutorial
 
-## Quick Start
-
-Run this at the start of any session:
+## When to Use Which Subcommand
 
 ```
-/moonbit-housekeeping
+Opening a session?           → /moonbit-housekeeping
+Finished a session?          → /moonbit-housekeeping fix
+Lost track of priorities?    → /moonbit-housekeeping triage
+About to cut a release?      → /moonbit-housekeeping release
 ```
 
-You'll get a report like:
+---
+
+## Subcommands
+
+### `/moonbit-housekeeping` — code health check
+
+Quick sanity check. Answers: **"is my repo in a clean state right now?"**
+
+Checks git state, submodules, and lint. Takes ~60s, costs ~$0.04 (Haiku).
+
+Use at the **start of every session** and **before pushing a commit**.
+
+Example output:
 
 ```
 ## Housekeeping Report
 
 git:   PASS  (main, up to date with origin)
-lint:  WARN  (2 files needed formatting)
+lint:  WARN  (2 files needed formatting — run fix)
 sync:  PASS  (all submodules clean)
-build: PASS  (js: ok, web: ok)
-test:  PASS  (1906 tests passed across 6 modules)
 ```
-
-If there are fixable items (formatting, stale interfaces), run:
-
-```
-/moonbit-housekeeping fix
-```
-
-That's it for daily use.
 
 ---
 
-## Daily Workflow
+### `/moonbit-housekeeping fix` — full check + auto-fix
 
-### Start of session
+Same check as default, but also runs build + test and applies safe fixes automatically:
 
-```
-/moonbit-housekeeping
-```
+- `moon fmt` — reformat .mbt files
+- `moon info` — regenerate .mbti interface files
+- `moon test --update` — update test snapshots
 
-Checks everything: git state, submodules, lint, build, tests. Takes ~60 seconds, costs ~$0.04 (Haiku).
-
-### Before committing
-
-```
-/moonbit-housekeeping lint
-```
-
-Runs only `moon fmt`, `moon check`, `moon info`. Fastest check (~20s). If it reports drift, run `fix`:
-
-```
-/moonbit-housekeeping fix
-```
-
-Then stage and commit.
-
-Note: there's also a pre-commit hook in `settings.json` that blocks commits with formatting drift or test failures. The hook runs automatically — `/moonbit-housekeeping lint` is for checking before you're ready to commit.
-
-### Before creating a PR
-
-```
-/moonbit-housekeeping
-```
-
-Full Haiku check. Make sure everything is green before pushing.
-
-### After pulling submodule changes
-
-```
-/moonbit-housekeeping test
-```
-
-Runs tests across main module and all submodules. Catches breakage from upstream changes.
+Use at the **end of a long session** before committing.
 
 ---
 
-## Weekly Cleanup
+### `/moonbit-housekeeping triage` — project direction
 
-### Step 1: Triage the backlog
+Answers: **"what should I work on next?"**
 
-```
-/moonbit-housekeeping triage
-```
+Reads `docs/TODO.md`, active plans, GitHub issues, and stale branches. Produces:
 
-This Sonnet agent reads `docs/TODO.md`, checks plan files, greps for evidence of completion, and classifies each item:
+- Classified TODO items (done / active / blocked / stale / needs-human-review)
+- Orphaned plans not referenced from TODO.md
+- Stale branch and worktree candidates (with confirmation before pruning)
+- Top 3 recommended next actions
 
-- **done** — work is implemented, plan is complete
-- **active** — plan exists, work not finished
-- **blocked** — explicitly waiting on something
-- **stale** — no plan, no code evidence, no recent activity
-- **needs-human-review** — mixed signals, you need to decide
+Updates `docs/decisions-needed.md` with items needing a decision.
 
-It also finds **orphaned plans** — files in `docs/plans/` not referenced from `docs/TODO.md`.
-
-### Step 2: Update the decision queue
-
-```
-/moonbit-housekeeping organize
-```
-
-This reads the triage output and updates `docs/decisions-needed.md`:
-
-- Adds new `needs-human-review` items
-- Flags items that have been resolved since last run
-- Preserves any notes you've added
-- Suggests creating plans for active items without one
-
-### Step 3: Review decisions
-
-Open `docs/decisions-needed.md`. Each pending item has:
-
-```markdown
-### <title>
-**Source:** where it came from
-**Context:** what the decision is about
-**Blocks:** what this blocks
-**Evidence:** what triage found
-**Added:** when it was added
-```
-
-When you've decided:
-
-1. Create `docs/decisions/YYYY-MM-DD-<topic>.md` with your decision
-2. Remove the item from `docs/decisions-needed.md`
-3. Next time organize runs, it will detect the resolution
+Use **weekly** or when returning after a break and feeling unsure what to tackle. Costs ~$1-2 (Sonnet).
 
 ---
 
-## Release Prep
+### `/moonbit-housekeeping release` — pre-release prep
 
-### Full check
+Answers: **"is this ready to ship?"**
 
-```
-/moonbit-housekeeping full
-```
+Runs three checks:
 
-Runs all Haiku categories + all Sonnet categories. Takes a few minutes, costs ~$5-8. Shows everything:
+- **changelog** — drafts user-facing changelog from git log, suggests semantic version bump
+- **api-review** — classifies `.mbti` changes as intentional / accidental / needs-review, flags breaking changes
+- **doc-drift** — checks dev docs, READMEs, and active plans for stale file paths and symbol references
 
-```
-### Tier 1 (Haiku)
-git:   PASS  (...)
-lint:  PASS  (...)
-sync:  PASS  (...)
-build: PASS  (...)
-test:  PASS  (...)
-
-### Tier 2 (Sonnet)
-triage:     WARN  (2 done, 7 active, 3 stale, 12 orphaned plans)
-changelog:  PASS  (50 commits → suggested bump: minor)
-api-review: PASS  (3 changes: 3 intentional, 0 needs review)
-doc-drift:  WARN  (2 stale references in dev docs)
-```
-
-### Draft a changelog
-
-```
-/moonbit-housekeeping changelog
-```
-
-Reads git log, groups by conventional commit type, drafts user-facing changelog entries, suggests semantic version bump. Output follows Keep a Changelog format.
-
-### Review API changes
-
-```
-/moonbit-housekeeping api-review
-```
-
-Reads `.mbti` interface diffs and classifies each change as intentional, accidental, or needs-review. Flags potential breaking changes.
-
-### Check doc freshness
-
-```
-/moonbit-housekeeping doc-drift
-```
-
-Checks development docs, READMEs, and active plans for stale file paths, function names, and command examples. Skips architecture docs (those describe principles, not symbols).
-
----
-
-## Single-Category Reference
-
-| Command | Tier | What it checks | When to use |
-|---------|------|---------------|-------------|
-| `/moonbit-housekeeping` | Haiku | All mechanical checks | Session start, before PR |
-| `/moonbit-housekeeping fix` | Haiku | All + auto-fix safe items | After long sessions |
-| `/moonbit-housekeeping git` | Haiku | git status, branches, PRs, submodules | Quick state check |
-| `/moonbit-housekeeping lint` | Haiku | moon fmt, check, info | Before committing |
-| `/moonbit-housekeeping sync` | Haiku | Submodule state, mbti drift | After submodule updates |
-| `/moonbit-housekeeping build` | Haiku | JS build, web build | After FFI changes |
-| `/moonbit-housekeeping test` | Haiku | All test suites | After any code change |
-| `/moonbit-housekeeping triage` | Sonnet | TODO.md freshness | Weekly cleanup |
-| `/moonbit-housekeeping organize` | Sonnet | Update decisions-needed.md | After triage |
-| `/moonbit-housekeeping changelog` | Sonnet | Draft changelog | Release prep |
-| `/moonbit-housekeeping api-review` | Sonnet | .mbti change classification | After refactoring |
-| `/moonbit-housekeeping doc-drift` | Sonnet | Stale doc references | After refactoring |
-| `/moonbit-housekeeping full` | Both | Everything | Release prep |
+Use **before tagging a release or opening a major PR**. Costs ~$3-5 (Sonnet).
 
 ---
 
@@ -202,37 +81,28 @@ Checks development docs, READMEs, and active plans for stale file paths, functio
 ### Status levels
 
 - **PASS** — no issues found
-- **WARN** — non-blocking issues (formatting needed, stale branch, dirty submodule)
-- **FAIL** — blocking issues (test failure, build error, lint error)
+- **WARN** — non-blocking (formatting needed, stale branch, dirty submodule)
+- **FAIL** — blocking (test failure, build error, lint error)
 
 ### Fixable items
 
-Items marked `(fixable)` in the report can be auto-fixed by running `/moonbit-housekeeping fix`. Only these operations are auto-fixed:
+Items marked `(fixable)` can be auto-fixed by running `/moonbit-housekeeping fix`. Only formatting, interface regeneration, and snapshot updates are auto-fixed. The skill never commits, pushes, or deletes files without confirmation.
 
-- `moon fmt` — reformat .mbt files
-- `moon info` — regenerate .mbti interface files
-- `moon test --update` — update test snapshots
-
-Everything else is report-only. The skill never commits, pushes, or deletes files.
-
-### Sonnet confidence levels
-
-Sonnet categories include confidence ratings:
+### Confidence levels (triage + release)
 
 - **high** — strong evidence, safe to act on
 - **medium** — reasonable evidence, verify before acting
 - **low** — mixed signals, human review needed
 
-Items with `confidence: low` or `classification: needs-human-review` are flagged explicitly.
+Items with `confidence: low` or `needs-human-review` are flagged explicitly.
 
 ---
 
 ## Cost Reference
 
-| Tier | Per run | When |
-|------|---------|------|
-| Haiku (default) | ~$0.04 | Every session |
-| Single Sonnet category | ~$1-2 | On demand |
-| Full (all categories) | ~$5-8 | Release prep |
-
-Default `/moonbit-housekeeping` is always Haiku-only. Sonnet categories are never run unless you explicitly ask for them.
+| Subcommand | Model | Per run |
+|---|---|---|
+| `/moonbit-housekeeping` | Haiku | ~$0.04 |
+| `/moonbit-housekeeping fix` | Haiku | ~$0.06 |
+| `/moonbit-housekeeping triage` | Sonnet | ~$1-2 |
+| `/moonbit-housekeeping release` | Sonnet | ~$3-5 |
