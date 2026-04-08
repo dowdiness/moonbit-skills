@@ -69,6 +69,17 @@ Claude Code hooks use this EXACT format — do NOT use `"PreCommit"` or other ma
             "timeout": 120
           }
         ]
+      },
+      {
+        "matcher": "Bash(git push*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "git submodule foreach 'git diff --exit-code @{push}.. 2>/dev/null || echo WARNING: unpushed submodule commits in $name'",
+            "timeout": 30,
+            "statusMessage": "Checking for unpushed submodule commits..."
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -89,6 +100,12 @@ Claude Code hooks use this EXACT format — do NOT use `"PreCommit"` or other ma
             "type": "command",
             "command": "moon update",
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "bash scripts/package-overview.sh",
+            "timeout": 30,
+            "statusMessage": "Discovering package structure..."
           }
         ]
       }
@@ -100,10 +117,18 @@ Claude Code hooks use this EXACT format — do NOT use `"PreCommit"` or other ma
 ### Key rules
 
 - **`PreToolUse` with `matcher`** — NOT `"PreCommit"`. The matcher `"Bash(git commit*)"` scopes the hook to commit commands only.
+- **`PreToolUse` for `git push`** — checks all submodules for unpushed commits before pushing. Prevents CI failures from missing submodule refs.
 - **`PostToolUse` on `Edit|MultiEdit`** — runs `moon check` after every file edit, surfacing errors immediately rather than letting them compound across multiple files.
 - **Keep pre-commit fast** — only `moon check && moon test` for the current module. Do NOT run `moon info && moon fmt` in the hook (those change files, which is confusing mid-commit). Do NOT run all modules — just the current one.
 - **Relative commands** — do NOT hardcode absolute paths. The hook runs from the working directory.
-- **`SessionStart`** — run `moon update` to ensure dependencies are fresh.
+- **`SessionStart`** — run `moon update` to ensure dependencies are fresh. Run `scripts/package-overview.sh` to provide a live package map (replaces static Package Map in CLAUDE.md).
+
+### Hooks enforce behavior, CLAUDE.md states policy
+
+**Principle:** If a behavior can be enforced mechanically by a hook, do NOT also state it as a rule in CLAUDE.md. Hooks are reliable; rules get ignored under pressure. CLAUDE.md should only contain:
+- Policy that can't be automated (code review standards, architectural decisions)
+- Context that can't be derived (MoonBit gotchas, design direction)
+- Pointers to tools and commands (not the workflow itself)
 
 ### Idempotent Merge
 
@@ -158,14 +183,22 @@ CLAUDE.md is loaded into every request. Embedding fixed MoonBit conventions inli
 
 ### Section Order (MANDATORY)
 
-Generate sections in this EXACT order. The file should be lean — project-specific content only, shared conventions @-imported.
+Generate sections in this EXACT order. The file should be lean — project-specific content only, shared conventions @-imported. Do NOT include sections that are derivable from tooling or enforced by hooks.
 
 1. `# Project title` — one-line description
-2. `@~/.claude/moonbit-base.md` — imports all shared MoonBit conventions (Language Notes, Code Search, Conventions, Code Changes, Code Review Standards, Development Workflow, Git & PR Workflow)
-3. `## Project Structure` — auto-detected submodules + packages, with archive path convention
+2. `@~/.claude/moonbit-base.md` — imports all shared MoonBit conventions (Language Notes, Code Search, Conventions, Code Review Standards, Git & PR Workflow)
+3. `## MoonBit Language Notes` — project-specific gotchas only (not generic MoonBit rules — those go in base)
 4. `## Commands` — auto-detected per-module commands
-5. `## Documentation` — auto-detected from docs/ structure, with archive rule
-6. `## Key Facts` — project-specific facts (CRDT algorithm, language, ground truth, etc.)
+5. `## Documentation` — condensed: key rules only, NOT a file listing (use `ls docs/` instead)
+6. `## Development Workflow` — CRITICAL rules only (UI prototype-first, perf benchmark-first). Do NOT repeat what hooks enforce.
+7. `## MoonBit Conventions` — project-specific patterns with code examples in a separate reference file
+8. `## Design Context` — if the project has UI/visual components
+
+**Removed sections (compared to earlier versions):**
+- ~~Package Map~~ — replaced by `scripts/package-overview.sh` SessionStart hook. Use `moon ide outline <path>` for details.
+- ~~Key Facts~~ — restates README/header. Redundant.
+- ~~Quality-First / Incremental Edit / Standard Workflow~~ — enforced by PostToolUse and PreToolUse hooks.
+- ~~Documentation file listing~~ — derivable via `ls docs/`. Goes stale.
 
 ### `~/.claude/moonbit-base.md`
 
@@ -203,30 +236,30 @@ cd <module_with_benchmarks> && moon bench --release
 
 ### Auto-Detected Section: Package Map
 
-Build a table per module from discovered `moon.pkg.json` files. Include package path and purpose (inferred from directory name and imports).
+Do NOT generate a static Package Map table. Instead, create `scripts/package-overview.sh` that runs `moon ide outline` per package and outputs a compact summary. The SessionStart hook runs this automatically. Add to CLAUDE.md:
+
+```markdown
+## Package Map
+
+The SessionStart hook runs `scripts/package-overview.sh` which provides a live package map at the start of every session. Use `moon ide outline <path>` to explore any package's public API before modifying it. Read `moon.mod.json` for module dependencies.
+```
 
 ### Auto-Detected Section: Documentation
 
-If a `docs/` directory exists, generate a Documentation section listing the subdirectories. Include the documentation doctrine rules and the archive rule:
+If a `docs/` directory exists, generate a **condensed** Documentation section with key rules only. Do NOT list individual files — use `ls docs/` or `Browse docs/` instead.
 
 ```markdown
 ## Documentation
 
-**Main docs:** [docs/](docs/)
+Browse `docs/` for architecture, decisions, development guides, and performance snapshots. Key rules:
 
-- **Architecture:** [docs/architecture/](docs/architecture/) — principles and invariants only
-- **Development:** [docs/development/](docs/development/)
-- **Performance:** [docs/performance/](docs/performance/) — dated snapshots, not updated in place
-- **Archive:** `docs/archive/` — completed plans and stale documents. Do not search here unless you need historical context.
-
-**Documentation rules:**
-- Architecture docs = principles only, never reference specific types/fields/lines. Link to files instead.
-- Plans = implementation details (struct defs, code examples, file paths). Archived on completion.
-- Performance docs = dated snapshots. New measurements go in new files, old ones are not updated.
-- Code is the source of truth — if a doc and the code disagree, the doc is wrong.
+- Architecture docs = principles only, never reference specific types/fields/lines
+- Code is the source of truth — if a doc and the code disagree, the doc is wrong
+- `docs/TODO.md` = active backlog index; `docs/plans/*.md` = execution specs
+- `docs/archive/` = completed work. Do not search here unless asked for historical context.
 ```
 
-The **documentation doctrine is mandatory** for all generated CLAUDE.md files. It prevents the staleness problem where architecture docs reference specific types/fields that change every PR. The **archive rule is mandatory** when `docs/archive/` exists.
+The **documentation doctrine rules are mandatory** for all generated CLAUDE.md files. The **archive rule is mandatory** when `docs/archive/` exists. But keep it to 4-5 lines — don't enumerate every subdirectory.
 
 ### Idempotent Merge for CLAUDE.md
 
@@ -261,3 +294,7 @@ moon check  # Verify project still works
 | CLAUDE.md over 80 lines | Extract generic MoonBit rules to the base file |
 | Running all modules in single-module project | Detect module count and scope accordingly |
 | Archive path wrong | `docs/archive/` not `docs/plans/archive/` — always verify before moving |
+| Static Package Map in CLAUDE.md | Use `scripts/package-overview.sh` SessionStart hook instead — static tables go stale |
+| Restating hook behavior as rules | If a hook enforces it, don't also write it as a CLAUDE.md rule — hooks are reliable, rules get ignored |
+| Listing doc files in CLAUDE.md | Use `Browse docs/` + key rules. File listings go stale every PR |
+| Inline code examples in CLAUDE.md | Move to `docs/development/*-examples.md` and link from CLAUDE.md |
