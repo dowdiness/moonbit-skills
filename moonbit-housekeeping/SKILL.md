@@ -1,27 +1,30 @@
 ---
 name: moonbit-housekeeping
 description: >
-  Repo maintenance for MoonBit projects. Four subcommands: default (fast code
-  health check), fix (full check + auto-fix), triage (project direction +
-  branch pruning), release (pre-release prep). Use at session start, before
-  commits, weekly for direction, and before releases.
+  Repo maintenance for MoonBit projects. Five subcommands: default (full
+  audit-and-fix pipeline), check (fast read-only health check), fix (full
+  check + auto-fix only), triage (project direction + branch pruning),
+  release (pre-release prep). Use at session start, before commits, weekly
+  for direction, and before releases.
 ---
 
 # MoonBit Housekeeping
 
-Four subcommands covering two concerns: **code health** (default, fix) and **project direction** (triage, release).
+Five subcommands covering two concerns: **code health** (default, check, fix) and **project direction** (triage, release).
 
 ## Usage
 
-- `/moonbit-housekeeping` — fast code health: git + lint + sync (Haiku, ~$0.04)
-- `/moonbit-housekeeping fix` — full check + auto-fix: all phases including build + test (Haiku, ~$0.06)
+- `/moonbit-housekeeping` — full audit-and-fix: all phases, auto-fix safe items, ask before destructive actions (Haiku, ~$0.08)
+- `/moonbit-housekeeping check` — fast read-only health check: git + lint + sync (Haiku, ~$0.04)
+- `/moonbit-housekeeping fix` — full check + auto-fix only, no destructive prompts (Haiku, ~$0.06)
 - `/moonbit-housekeeping triage` — project direction: backlog + branch pruning + recommendations (Sonnet, ~$1-2)
 - `/moonbit-housekeeping release` — pre-release prep: changelog + api-review + doc-drift (Sonnet, ~$3-5)
 - `/moonbit-housekeeping help` — display TUTORIAL.md
 
 ## When to Use
 
-- **Start of session** → `/moonbit-housekeeping`
+- **Start of session** → `/moonbit-housekeeping` (most common)
+- **Read-only glance** → `/moonbit-housekeeping check`
 - **End of long session** → `/moonbit-housekeeping fix`
 - **Weekly / re-orienting** → `/moonbit-housekeeping triage`
 - **Before release or major PR** → `/moonbit-housekeeping release`
@@ -40,7 +43,8 @@ If `moon` is not on PATH, report the error and stop.
 
 | Input | Mode | Model | Categories |
 |-------|------|-------|------------|
-| (none) | report | haiku | git, lint, sync |
+| (none) | audit | haiku | git, lint, sync, build, test |
+| `check` | report | haiku | git, lint, sync |
 | `fix` | fix | haiku | git, lint, sync, build, test |
 | `triage` | report+prune | sonnet | triage |
 | `release` | report | sonnet | changelog, api-review, doc-drift |
@@ -52,7 +56,15 @@ Read `TUTORIAL.md` from the same directory as this skill file and display its co
 
 ### Step 3: Dispatch subagents
 
-**Default or fix:** Dispatch one Haiku subagent using the Haiku Prompt Template below.
+**Default (audit):** Dispatch one Haiku subagent using the Haiku Prompt Template with MODE=audit and CATEGORIES=git,lint,sync,build,test. After receiving output:
+1. Auto-fix safe items (same as fix mode whitelist: moon fmt, moon info, moon test --update).
+2. Detect destructive action candidates from git phase: stale branches (merged into main), orphan worktrees, branches with no activity >30 days and no open PR.
+3. If destructive candidates found: display them with last-commit dates and ask "Clean up these branches/worktrees? [y/N]". If confirmed, dispatch a Haiku prune subagent (same as triage prune template).
+4. Render the unified report.
+
+**Check:** Dispatch one Haiku subagent using the Haiku Prompt Template with MODE=report and CATEGORIES=git,lint,sync.
+
+**Fix:** Dispatch one Haiku subagent using the Haiku Prompt Template with MODE=fix and CATEGORIES=git,lint,sync,build,test.
 
 **Triage:** Dispatch one Sonnet subagent using the Triage Prompt Template. After receiving output:
 1. Write `docs/decisions-needed.md` using the Decisions-Needed format below — add new `needs-human-review` items, preserve existing human notes, remove items now classified as "done".
@@ -71,7 +83,7 @@ Parse JSON output from all subagents. Render the unified report (format below). 
 ~~~
 You are a housekeeping agent for a MoonBit project. Run mechanical repo checks and output structured JSON.
 
-MODE: {MODE}  (report = read-only, fix = apply safe changes)
+MODE: {MODE}  (report = read-only, fix = apply safe changes, audit = apply safe changes + report destructive candidates)
 CATEGORIES: {CATEGORIES}  (git, lint, sync, build, test)
 WORKING DIRECTORY: {CWD}
 
@@ -95,7 +107,8 @@ Run ALL of these in ONE Bash call:
   echo "=== WORKTREES ===" ; git worktree list ;
   echo "=== PRS ===" ; gh pr list --state open --json number,title,headRefName,statusCheckRollup 2>/dev/null || echo "gh not available" ;
   echo "=== SUBMODULES ===" ; git submodule status ;
-  echo "=== UNTRACKED ===" ; git ls-files --others --exclude-standard
+  echo "=== UNTRACKED ===" ; git ls-files --others --exclude-standard ;
+  echo "=== BRANCH_DATES ===" ; git for-each-ref --sort=committerdate refs/heads/ --format='%(refname:short) %(committerdate:short) %(subject)'
 
 For submodules, note if any are dirty (+prefix) or on detached HEAD.
 
@@ -116,7 +129,7 @@ Run in ONE Bash call:
   echo "=== STAT ===" ; git diff --stat ; echo "=== MBTI ===" ; git diff -- '*.mbti'
 
 If MODE is "report": run `git checkout -- .` to revert all changes.
-If MODE is "fix": keep the changes. Report them as fixed items.
+If MODE is "fix" or "audit": keep the changes. Report them as fixed items.
 
 ---
 
@@ -145,11 +158,20 @@ OUTPUT SCHEMA:
     "build": {"status": "pass|warn|fail", "items": [...]},
     "test": {"status": "pass|warn|fail", "items": [...]}
   },
+  "destructive_candidates": [],
   "truncated": false,
   "tool_calls_used": 20
 }
 
 Only include categories that were requested. Omit skipped categories from the JSON.
+
+DESTRUCTIVE CANDIDATES (audit mode only):
+If MODE is "audit", populate "destructive_candidates" by analyzing git phase output:
+- Branches merged into main → candidate
+- Branches with last commit >30 days ago and no open PR → candidate
+- Worktrees referencing deleted or fully-merged branches → candidate
+Format each as: {"type": "branch|worktree", "name": "...", "path": "... (worktree only)", "reason": "merged into main|stale (last commit YYYY-MM-DD, no open PR)|orphan worktree", "last_commit_date": "YYYY-MM-DD"}
+If MODE is not "audit", set "destructive_candidates" to [].
 
 STATUS RULES:
 - "pass" = no issues found
@@ -453,7 +475,7 @@ OUTPUT SCHEMA:
 
 ## Report Format (Opus renders this from JSON)
 
-### Default / Fix report
+### Default (audit) / Fix report
 
 ```
 ## Housekeeping Report
@@ -461,8 +483,33 @@ OUTPUT SCHEMA:
 git:   {STATUS}  ({one-line summary})
 lint:  {STATUS}  ({one-line summary})
 sync:  {STATUS}  ({one-line summary})
-build: {STATUS}  ({one-line summary, fix mode only})
-test:  {STATUS}  ({one-line summary, fix mode only})
+build: {STATUS}  ({one-line summary})
+test:  {STATUS}  ({one-line summary})
+```
+
+If audit mode and `destructive_candidates` is non-empty, append:
+
+```
+### Cleanup candidates
+
+| Type | Name | Reason | Last commit |
+|------|------|--------|-------------|
+| branch | feature/old | merged into main | 2026-03-01 |
+| worktree | /path/to/wt | orphan worktree | 2026-02-15 |
+
+Clean up these branches/worktrees? [y/N]
+```
+
+If confirmed, dispatch a Haiku prune subagent (same template as triage prune).
+
+### Check report
+
+```
+## Housekeeping Report (check)
+
+git:   {STATUS}  ({one-line summary})
+lint:  {STATUS}  ({one-line summary})
+sync:  {STATUS}  ({one-line summary})
 ```
 
 ### Triage report
