@@ -63,6 +63,12 @@ Before marking any feature complete:
 - If tests use snapshot testing (`inspect`), consider whether behavior change is intentional
 - Only proceed when ALL tests pass
 
+### 5a. Property Test Quality (when using `@qc.quick_check_fn`)
+Property-based tests need their own verification:
+- **Generators must crash, not skip.** If a generator is documented as producing valid inputs, use `unwrap()` on compile/construct results. Never `None => true` — that hides generator bugs as false positives.
+- **Check generator distribution.** After writing generators, verify they actually produce the topology/variant classes you care about. A generator that "covers all cases" but never hits a critical path (e.g., feedback cycles, stereo delay) gives false confidence.
+- **Review test generators like production code.** Generator blind spots are test blind spots.
+
 ### 6. CLI Functional Testing (if applicable)
 If implementing a CLI tool or demo app, manually verify:
 1. Run `--help` at root level - check output formatting

@@ -372,6 +372,16 @@ The associated type becomes a **field type choice** in each struct. The trait po
 - A generic data type (`Layout[A]`, `Array[A]`, `Tree[A]`) is parameterized, but the trait consuming it cannot be
 - Combined with Finally Tagless: each TermSym interpretation fixes the container's type parameter differently
 
+## Feasibility Check Before Designing
+
+Before designing a trait abstraction, verify the language can express it:
+
+1. **Write the trait signature first.** If the methods have different arity or return types across implementations (e.g., `process(Self, AudioBuffer)` vs `process(Self, AudioBuffer, AudioBuffer)`), a single trait cannot capture both. MoonBit traits have no associated types, no default methods, and no type parameters.
+
+2. **Check what's actually duplicated.** Often the "duplication" is thin forwarding methods (10 lines each), while the real logic is already shared in a backing struct. Extracting capability traits for the shared interface (e.g., `apply_control`) is worthwhile; forcing a trait over structurally different methods is not.
+
+3. **Prefer capability traits over monolithic unification.** If only some methods can be unified, extract those into a small trait and leave the rest as concrete methods. Partial wins are still wins.
+
 ## Anti-Patterns
 
 ### Over-Sized Traits

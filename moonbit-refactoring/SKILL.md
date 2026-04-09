@@ -17,11 +17,12 @@ description: "Refactor MoonBit code to be idiomatic: shrink public APIs, convert
 
 1. **Architecture first**: Review package structure, dependencies, and API boundaries.
 2. **Inventory** public APIs and call sites (`moon doc`, `moon ide find-references`).
-3. **Pick one refactor theme** (API minimization, package splits, pattern matching, loop style).
-4. **Apply the smallest safe change**.
-5. **Update docs/tests** in the same patch.
-6. **Run `moon check`, then `moon test`**.
-7. **Use coverage** to target missing branches.
+3. **Safety net**: Before structural changes, write property tests that capture the invariants you need to preserve. Use `@qc.quick_check_fn` with generators that produce valid inputs. Generators must `unwrap()` on failure — never `None => true`.
+4. **Pick one refactor theme** (API minimization, package splits, pattern matching, loop style).
+5. **Apply the smallest safe change**.
+6. **Update docs/tests** in the same patch.
+7. **Run `moon check`, then `moon test`**.
+8. **Use coverage** to target missing branches.
 
 Avoid local cleanups (renaming, pattern matching) until the high-level structure is sound.
 
@@ -32,6 +33,8 @@ Avoid local cleanups (renaming, pattern matching) until the high-level structure
 
 ### Splitting Files
 Treat files in MoonBit as organizational units; move code freely within a package as long as each file stays focused on one concept.
+
+**Delete-first technique:** When splitting a large file, extract sections into new files, then delete the original before running `moon check`. The compiler will report any missing definitions — this is easier and more reliable than verifying line-range extractions by counting. Never try to verify splits by comparing line counts.
 
 ### Splitting Packages
 When spinning off package `A` into `A` and `B`:
