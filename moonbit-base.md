@@ -16,6 +16,7 @@
 | Fallible return type       | `T!Error` with `!` propagation      | `try?` (won't catch abort)    |
 | Iteration                  | `for .. in`                         | `loop` (deprecated)           |
 | Visibility default         | `pub`                               | `pub(all)` unless needed      |
+| Re-export from dependency    | `pub using @pkg { type T }`       | manual wrapper functions      |
 | Foreign trait + foreign type | newtype wrapper                   | direct impl (orphan rule)     |
 | Unimplemented placeholder  | `...`                               | leaving in committed code     |
 | Debugging derive           | `derive(Debug)` + manual `impl Show` for `inspect` | `derive(Show)` warns [0027] |
@@ -76,6 +77,20 @@ grep -rn '() => {}' <pkg>/*.mbt                      # Empty callback anti-patte
   using @ref { type Ref }
   let r = Ref(42)             // instead of @ref.Ref(42)
   ```
+- **Re-exports with `pub using`:** `pub using @pkg { type T, trait Trait, fn_name }` both re-exports symbols to consumers AND makes them available locally without prefix. Use this for facade packages that provide backward compatibility during package splits.
+  ```moonbit
+  // In facade package — re-exports all DSP types from @dsp
+  pub using @dsp {
+    type AudioBuffer,
+    type DspContext,
+    type Waveform,
+    trait ArithSym,
+    is_finite,
+  }
+  // Consumers of this package see AudioBuffer as if defined here.
+  // Code within this package can use AudioBuffer without @dsp. prefix.
+  ```
+  **What works through `pub using`:** function calls, type annotations, method calls on re-exported types, trait bounds, enum pattern matching via `Type::Constructor`. **What doesn't:** bare enum constructors via `@pkg.Constructor` (use `using @pkg { type T }` + `T::Constructor(args)` instead — this is standard MoonBit, not a `pub using` limitation). The `.mbti` interface shows re-exported types with their canonical origin (e.g., `@dsp.AudioBuffer`), but consumer code using the facade path still compiles.
 - **Naming:** `snake_case` for functions, methods, variables, and modules. `PascalCase` for types, enums, and constructors. `SCREAMING_SNAKE_CASE` for `const` constants.
 
 ## Control Flow

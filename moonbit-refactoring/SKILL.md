@@ -37,24 +37,28 @@ Treat files in MoonBit as organizational units; move code freely within a packag
 **Delete-first technique:** When splitting a large file, extract sections into new files, then delete the original before running `moon check`. The compiler will report any missing definitions — this is easier and more reliable than verifying line-range extractions by counting. Never try to verify splits by comparing line counts.
 
 ### Splitting Packages
-When spinning off package `A` into `A` and `B`:
+When splitting package `A` into `A` (facade) and `B` (extracted):
 
-1. Create the new package and re-export temporarily:
+1. Create the new package `B`, move source files there.
+
+2. In `A`'s `moon.pkg`, add `B` as a dependency. Add `pub using` re-exports so all consumers of `A` continue working without import changes:
    ```mbt
-   // In package B
-   using @A { ... }  // re-export A's APIs
+   // In package A — backward-compatible re-export
+   pub using @B {
+     type MyType,       // structs, enums
+     trait MyTrait,     // traits
+     my_function,       // functions and constants
+   }
    ```
-   Ensure `moon check` passes before proceeding.
+   `pub using` both re-exports to consumers AND makes names available locally in `A` — so code remaining in `A` can use `MyType` without the `@B.` prefix. Run `moon check` after this step.
 
-2. Find and update all call sites:
-   ```bash
-   moon ide find-references <symbol>
-   ```
-   Replace bare `f` with `@B.f`.
+3. **Expect private-symbol errors.** Private functions in `A` that were used by code now in `B` (or vice versa) will cause compilation errors. This is the point — the split reveals hidden coupling. Fix by making necessary functions `pub` in the package that owns them, and add them to the re-export list if consumers need them.
 
-3. Remove the `use` statement once all call sites are updated.
+4. **Verify `.mbti` stability.** Run `moon info` and check `git diff A/pkg.generated.mbti`. Re-exported types appear with their canonical origin (e.g., `@B.MyType` instead of `MyType`), but consumer code using `@A.MyType` still compiles. The `pub using` lines appear in the `.mbti` as `pub using @B {type MyType}`.
 
-4. Audit and remove newly-unused `pub` APIs from both packages.
+5. **Migrate consumers incrementally.** Consumers can switch from `@A.MyType` to `@B.MyType` at their own pace. Once all consumers have migrated, remove the re-exports from `A`.
+
+6. Audit and remove newly-unused `pub` APIs from both packages.
 
 ### Guidelines
 - Prefer acyclic dependencies: lower-level packages should not import higher-level ones.
@@ -276,17 +280,18 @@ moon info
 ```
 Use these commands for reliable refactoring.
 
-Example: spinning off `package_b` from `package_a`.
+Example: extracting `package_b` from `package_a`.
 
-Temporary import in `package_b`:
+Add backward-compatible re-exports in `package_a`:
 ```mbt
-using @package_a { a, type B }
+pub using @package_b { a, type B }
 ```
 
 Steps:
-1. Use `moon ide find-references <symbol>` to find all call sites of `a` and `B`.
-2. Replace them with `@package_a.a` and `@package_a.B`.
-3. Remove the `using` statement and run `moon check`.
+1. Move files to `package_b`, add `pub using` re-exports in `package_a`.
+2. Run `moon check` — fix any private-symbol errors from the split.
+3. Run `moon info` and verify `git diff *.mbti` shows only expected changes.
+4. Later, use `moon ide find-references <symbol>` to migrate consumers from `@package_a.B` to `@package_b.B` and remove re-exports.
 
 ## Deprecated Syntax Quick Reference
 
