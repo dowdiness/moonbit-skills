@@ -42,23 +42,32 @@ uncatchable  catchable   catchable+typed          always succeeds
 
 | Fault class | Description | Default mechanism |
 |-------------|-------------|-------------------|
-| **Defect** | Programmer bug: unreachable branch, violated invariant, broken assumption | `fail("msg")` |
+| **Defect** | Logic bug: unreachable branch, impossible state. Data is consistent but code shouldn't be here. | `fail("msg")` |
 | **Expected** | Input validation, I/O, parsing, business logic | `raise ConcreteError` |
-| **Corruption** | Data integrity loss, poisoned state | `abort("msg")` |
+| **Corruption** | Data integrity loss: broken invariants, poisoned state, partial mutation without rollback | `abort("msg")` |
 
 ### The Decision Tree
 
 ```
-Is the state poisoned / is continued execution untrustworthy?
-  YES ──► abort("msg")
-  NO  ──► Is this a programmer bug (unreachable, invariant violation)?
-            YES ──► Has shared state been mutated without rollback guarantee?
-                      YES ──► abort("msg")  [mutation without rollback = poison]
-                      NO  ──► fail("msg")   [safe to unwind to boundary]
-            NO  ──► Is the operation recoverable with degraded output?
-                      YES ──► return (T, Array[Diagnostic])
-                      NO  ──► raise ConcreteError::Variant(...)
+Is the data structure / state already corrupt?
+  (e.g., B-tree node with no children, invalid cursor, broken invariant)
+  YES ──► abort("msg")  [pre-existing corruption — can't trust anything]
+
+Has this operation already mutated shared state without rollback?
+  (e.g., partially rebalanced tree, half-applied batch)
+  YES ──► abort("msg")  [mutation without rollback = poison]
+
+Is this a programmer bug (unreachable branch, impossible state)?
+  YES ──► fail("msg")   [no corruption, safe to unwind to boundary]
+
+Is the operation recoverable with degraded output?
+  YES ──► return (T, Array[Diagnostic])
+
+Otherwise:
+  ──► raise ConcreteError::Variant(...)
 ```
+
+**Key distinction:** A guard that checks structural integrity (e.g., "node must have children") detects *pre-existing corruption*, not a precondition on caller input. Even if the guard fires before *this function* mutates anything, the data structure is already in a corrupt state. That's the corruption fault class, not defect.
 
 ### When to Use Each
 
@@ -73,7 +82,7 @@ fn validate_invariant(self : BTree[T]) -> Unit {
 }
 ```
 
-**`fail("msg")`** — Defect detection before observable mutation.
+**`fail("msg")`** — Defect in logic, not in data. The data structure is consistent, but the code reached a path that should be impossible.
 
 ```moonbit
 // Unreachable match branch — if hit, it's a bug, but no state is corrupted
