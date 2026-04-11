@@ -69,6 +69,8 @@ Otherwise:
 
 **Key distinction:** A guard that checks structural integrity (e.g., "node must have children") detects *pre-existing corruption*, not a precondition on caller input. Even if the guard fires before *this function* mutates anything, the data structure is already in a corrupt state. That's the corruption fault class, not defect.
 
+**No safe recovery = abort.** Even when the fault class is defect (not corruption), if catching the error and continuing would cause *subsequent operations* to produce silently wrong results, use `abort`. The question isn't just "is the data corrupt now?" but also "can the caller safely continue after this?" Example: if a parser's `start_at` fails and the parser continues, the next `finish_node` closes the wrong ancestor — silently corrupting the tree. That's worse than crashing. When recovery corrupts, abort is correct even for defects.
+
 ### When to Use Each
 
 **`abort("msg")`** — Almost never in application code.
@@ -176,6 +178,8 @@ type! TextError {
 ```
 
 **Exception:** When the dependency IS the semantic contract (thin facades, re-export packages), direct propagation is correct. See Boundary Rules below.
+
+**Pitfall: same syntax, different semantics.** When multiple code paths share the same syntactic pattern (e.g., `stack.last() → None`), don't assign the same variant to all of them. Trace *why* the condition fires in each context. Example: `stack.last() → None` after a FinishNode means an unbalanced FinishNode consumed the root frame; the same pattern after a Token means the token has no parent because prior FinishNodes emptied the stack. These are different error variants (`UnbalancedFinish` vs `OrphanedEvent`) despite identical syntax.
 
 ### Error Hierarchies (`suberror`)
 
@@ -418,6 +422,18 @@ When package A calls package B which raises `BError`:
 | B is an implementation detail | Wrap with semantic variants | `EditorError::SyncFailed(detail~)` not `EditorError::FromEgw(TextError)` |
 | B is replaceable | Wrap — A's API must be independent of B | Translate to A's own error vocabulary |
 
+## Audit Process
+
+When auditing `abort` calls for conversion to `fail`/`raise`:
+
+**1. Read the package's design docs first.** Check `docs/design.md`, `docs/api/`, README. The package may have its own error handling philosophy that prescribes the answer. Don't classify aborts using only the decision tree — the design docs provide context the tree can't.
+
+**2. Find ALL callers of functions whose signatures will change.** Use `moon ide find-references` or grep the entire module — not just the file you expect callers in. A missed caller means an unhandled error path that still crashes. Pay special attention to: benchmarks, test helpers, and alternate code paths (e.g., block reparse vs normal parse).
+
+**3. Trace error variants through concrete scenarios.** After writing the error type and mapping table, pick one concrete input per variant and trace execution step by step. Verify each variant name matches the actual state when it fires. Same syntactic pattern (e.g., `stack.last() → None`) can mean different things in different code paths — don't map mechanically.
+
+**4. Ask "what happens if the caller continues?"** For each abort site, before converting: if this error is caught and the program continues, do subsequent operations produce silently wrong results? If yes, keep the abort.
+
 ## Checklist
 
 When reviewing error handling in MoonBit code:
@@ -431,3 +447,5 @@ When reviewing error handling in MoonBit code:
 - [ ] Diagnostics use structured types, not `Array[String]` (except prototyping)
 - [ ] `noraise` functions audited for `abort` paths
 - [ ] Error variants are semantic (describe what went wrong) with context fields
+- [ ] Error variants traced through concrete scenarios (same syntax ≠ same variant)
+- [ ] Abort sites checked for "no safe recovery" (continuing produces silent corruption)
