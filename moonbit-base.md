@@ -106,7 +106,7 @@ grep -rn '() => {}' <pkg>/*.mbt                      # Empty callback anti-patte
   **`guard`** filters out the bad case so the rest of the function stays flat. Prefer `guard` over `if ... { return }` or nested `match` when only one branch exits early.
   ```moonbit
   guard let Some(x) = opt else { return Err("missing") }
-  guard n > 0 else { abort("n must be positive") }
+  guard n > 0 else { fail("n must be positive") }
   // happy path continues here — no nesting
   ```
 - **Iteration:** `for .. in` with accumulator state. `loop` keyword is deprecated.
@@ -165,7 +165,7 @@ grep -rn '() => {}' <pkg>/*.mbt                      # Empty callback anti-patte
   ```
 - **Trait impl:** `pub impl Trait for Type with method(self) { ... }` — one method per impl block
 - **Orphan rule** (error 4061): can't impl foreign trait for foreign type — use a private newtype wrapper
-- **Error handling:** use `Unit!Error` or `T!Error` for fallible return types. Error propagation uses `!` suffix on calls, not `raise` keyword. `try?` does not catch `abort`. `?` operator is not always supported — use explicit match/error handling when it fails.
+- **Error handling:** use `Unit!Error` or `T!Error` for fallible return types. Normal calls auto-propagate errors (zero syntax cost). `try?` converts to `Result[T, E]` (preserves concrete `E`). `abort` is NOT catchable — prefer `fail("msg")` for defect detection (catchable + source location). See `moonbit-error-handling` skill for full conventions (abort vs fail vs raise, boundary rules, error type design).
 - **TODO syntax:** `...` is a placeholder for unimplemented code. It type-checks as any type but aborts at runtime. Do not leave `...` in committed code.
 
 ## Testing
