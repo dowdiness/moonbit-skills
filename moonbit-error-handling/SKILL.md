@@ -118,24 +118,34 @@ fn parse_cst(source : String) -> (CstNode, Array[Diagnostic]) raise LexError {
 
 ## Error Type Design
 
-### Granularity: One Type Per Public Subsystem
+### Granularity: Group by Catch Site
 
-A package that exposes one capability has one error type. A package with multiple independent capabilities may have multiple error types. Do not create one giant error enum per package or one error type per function.
+Error type granularity is determined by **who catches the error and what decisions they make**, not by package structure.
+
+- **Errors that callers typically catch together** should share a type
+- **Errors that callers handle independently** should have separate types
+
+This matters because of a MoonBit-specific constraint: when a `try` block raises multiple error types, the compiler widens to `Error` and exhaustiveness checking is lost. Separate types harm callers who handle them in the same `try` block. Conversely, one giant enum forces callers to write match arms for variants that can never occur in their context.
+
+**How to decide:** Look at the boundary where errors are caught. If the catch site distinguishes between failure modes, those modes need separate types. If it handles them uniformly, they can share a type.
 
 ```moonbit
-// Good: editor package has three independent subsystems
-type! EphemeralError { /* serialization failures */ }
-type! TreeEditError { /* structural editing failures */ }
-type! ProtocolError { /* sync protocol failures */ }
+// Good: editor's FFI boundary catches serialization, editing, and sync
+// errors at different points with different recovery strategies
+type! EphemeralError { /* serialization — retry with fresh state */ }
+type! TreeEditError { /* structural edit — show error, discard operation */ }
+type! ProtocolError { /* sync — disconnect and reconnect */ }
 
-// Bad: one catch-all per package
+// Bad: one catch-all — callers must match variants that can't occur
 type! EditorError { Ephemeral(...), TreeEdit(...), Protocol(...) }
 
-// Bad: one per function
+// Bad: one per function — callers in a try block lose exhaustiveness
 type! InsertError { ... }
 type! DeleteError { ... }
 type! MoveError { ... }
 ```
+
+**When a package has no expected failures** (all errors are defects or corruption), it needs no error types at all. Use `fail` for defects and `abort` for corruption. Don't create error types for bugs — they're not part of the API contract.
 
 ### Variant Design: Semantic, With Context
 
@@ -386,7 +396,7 @@ test "malformed input produces diagnostics" {
 | `raise` in untyped `Error` for public APIs | Callers lose exhaustiveness checking | Use concrete `raise MyError` |
 | `abort` in code reachable from FFI | Crashes WASM module, bypasses catch | Audit and convert to `fail` or `raise` |
 | `noraise` on function that calls `abort` | Misleading — `noraise` only covers `raise`, not `abort` | Document abort paths or eliminate them |
-| Giant umbrella error enum | One type with 20 variants spanning unrelated subsystems | Split into per-subsystem error types |
+| Giant umbrella error enum | One type with 20 variants spanning unrelated catch sites | Split by catch-site — errors caught together share a type |
 
 ## Boundary Wrapping vs Direct Propagation
 
