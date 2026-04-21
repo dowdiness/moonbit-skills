@@ -45,16 +45,27 @@ When splitting package `A` into `A` (facade) and `B` (extracted):
    ```mbt
    // In package A — backward-compatible re-export
    pub using @B {
-     type MyType,       // structs, enums
+     type MyType,       // structs, enums (methods/associated fns come along)
      trait MyTrait,     // traits
      my_function,       // functions and constants
    }
    ```
    `pub using` both re-exports to consumers AND makes names available locally in `A` — so code remaining in `A` can use `MyType` without the `@B.` prefix. Run `moon check` after this step.
 
+   **What re-exports automatically.** Listing `type Foo` re-exports the type *and* all of its methods and associated functions — `Foo::new()`, `x.method()` all resolve through `@A.Foo` unchanged. Do not list methods individually. Functions, constants, and traits must be listed by name. Trailing commas are allowed.
+
+   **`pub using` forwards names, not permissions.** A `pub struct S` is read-only to external code (fields readable, but external code cannot construct `S::{...}` or write `mut` fields). Re-exporting does not change that — consumers of `@A` see the same visibility they would see importing directly from `@B`. If external construction or field mutation is required, declare the origin as `pub(all) struct S`, or expose a constructor / mutator method. Field-level `pub` modifiers are redundant in a `pub struct` (warning 0008) — the whole-struct modifier controls visibility.
+
 3. **Expect private-symbol errors.** Private functions in `A` that were used by code now in `B` (or vice versa) will cause compilation errors. This is the point — the split reveals hidden coupling. Fix by making necessary functions `pub` in the package that owns them, and add them to the re-export list if consumers need them.
 
-4. **Verify `.mbti` stability.** Run `moon info` and check `git diff A/pkg.generated.mbti`. Re-exported types appear with their canonical origin (e.g., `@B.MyType` instead of `MyType`), but consumer code using `@A.MyType` still compiles. The `pub using` lines appear in the `.mbti` as `pub using @B {type MyType}`.
+4. **Verify `.mbti` stability.** Run `moon info` and check `git diff A/pkg.generated.mbti`. Re-exported types show up as `pub using @B {type MyType}` lines; re-exported functions are inlined as ordinary forwarded signatures with parameter / return types referring to the canonical origin. Consumer code written against `@A.MyType` / `@A.my_function` still compiles. Concretely, `A`'s `.mbti` after re-exporting `type Store, put` from `@B` looks like:
+
+   ```
+   // A/pkg.generated.mbti (excerpt)
+   import { "B" }
+   pub fn put(@B.Store, String, Int) -> Unit     // function: fully-qualified origin types
+   pub using @B {type Store}                      // type: appears as a using line
+   ```
 
 5. **Migrate consumers incrementally.** Consumers can switch from `@A.MyType` to `@B.MyType` at their own pace. Once all consumers have migrated, remove the re-exports from `A`.
 
@@ -90,6 +101,8 @@ let ch = r.next()
 To make the transition smooth, place `#as_free_fn(old_name, ...)` on the method; it emits a deprecated free function
 `old_name` that forwards to the method.
 Then you can check call sites and update them gradually by looking at warnings.
+
+Visibility transfers one-to-one: if the original free function was `pub fn`, write `pub fn Reader::next`. Place the docstring first, then `#as_free_fn`, then the declaration. The `self` name is the MoonBit convention — use it rather than re-naming to `r`.
 Example (chaining):
 ```mbt nocheck
 buf..write_string("#\\")..write_char(ch)
@@ -172,6 +185,8 @@ match s {
   _ => ()
 }
 ```
+
+When the rest is not needed, drop the name: use `..` instead of `..rest`. Same for arrays — `[x, ..]` when you only need the head, `[x, ..tail]` when tail is consumed. Also note semantics: `[only]` matches **exactly one** element, `[only, ..]` matches **one or more**. Pick based on intent, not style.
 #### Char literal matching
 
 Use char literal overloading for `Char`, `UInt16`, and `Int`; the examples below rely on it. This is handy when matching `String` indexing results (`UInt16`) against a char range.
@@ -218,8 +233,8 @@ for i in 0..<len {
 ```
 
 ## Loop Specs (Dafny-Style Comments)
-- Add specs for functional-state loops.
-- Skip invariants for simple `for x in xs` loops.
+- Add specs for functional-state loops — the `for i = 0, acc = 0; cond; { ... } else { acc }` form that threads state through the header.
+- Skip invariants for simple loops: `for x in xs`, range loops like `for i in 1..<xs.length()`, and range loops that accumulate into an external `let mut acc` are all "simple" in this sense.
 - Add TODO when a decreases clause is unclear (possible bug).
 
 Example:
@@ -284,7 +299,7 @@ Example: extracting `package_b` from `package_a`.
 
 Add backward-compatible re-exports in `package_a`:
 ```mbt
-pub using @package_b { a, type B }
+pub using @package_b { type B, a }
 ```
 
 Steps:
