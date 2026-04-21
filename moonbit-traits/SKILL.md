@@ -337,7 +337,7 @@ struct EditorLayout  { layout: Layout[EditorAnn] }       // A = EditorAnn
 struct LspLayout     { layout: Layout[LspAnn] }          // A = LspAnn
 ```
 
-All three implement the same trait (e.g., `TermSym`), so `replay(term)` works with any of them via type ascription:
+All three implement the same trait — here called `TermSym`, a Finally Tagless interpreter trait with one method per AST constructor (see the `moonbit-expression-problem` skill for `TermSym` / `replay` in full). `replay(term)` is a function whose return type is resolved by type ascription at the call site, so it works with any of the three wrapper structs:
 
 ```moonbit
 let pretty = (replay(term) : PrettyLayout).layout   // Layout[SyntaxCategory]
@@ -357,9 +357,11 @@ pub(open) trait Pretty {
 // Method syntax for the common case
 term.to_layout()
 
-// Explicit TermSym path for richer annotations
+// Explicit TermSym path for richer annotations (see moonbit-expression-problem)
 (replay(term) : EditorLayout).layout
 ```
+
+`Pretty` is implemented on `Term` itself — the convenience layer for the default `SyntaxCategory` annotation. `EditorLayout` and `LspLayout` do *not* implement `Pretty` (their `Layout[A]` return types differ); callers reach them via the explicit `replay(term) : StructType` path. If you're not using Finally Tagless, the struct-per-annotation idea still applies; replace `replay` with whatever polymorphic construction mechanism fits your codebase (e.g., overloaded builder functions returning each struct).
 
 ### Key Insight
 
