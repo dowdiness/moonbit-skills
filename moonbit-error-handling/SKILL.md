@@ -71,6 +71,8 @@ Otherwise:
 
 **No safe recovery = abort.** Even when the fault class is defect (not corruption), if catching the error and continuing would cause *subsequent operations* to produce silently wrong results, use `abort`. The question isn't just "is the data corrupt now?" but also "can the caller safely continue after this?" Example: if a parser's `start_at` fails and the parser continues, the next `finish_node` closes the wrong ancestor — silently corrupting the tree. That's worse than crashing. When recovery corrupts, abort is correct even for defects.
 
+**This rule takes precedence over the FFI-reachability prohibition** (see FFI Safety below and the checklist's "unless corruption-risk" clause). The FFI-reachability rule forbids `abort` for ordinary defects where catching and continuing is safe; it does not forbid `abort` for the no-safe-recovery case. "corruption-risk" in the checklist means **either** pre-existing corruption **or** "recovery would corrupt subsequent operations" — both qualify. A WASM module crash is the correct outcome when the alternative is silent mis-structuring that the host cannot detect.
+
 ### When to Use Each
 
 **`abort("msg")`** — Almost never in application code.
@@ -126,6 +128,8 @@ fn parse_cst(source : String) -> (CstNode, Array[Diagnostic]) raise LexError {
   // ...
 }
 ```
+
+The returned `T` is a **complete, usable value** — for tree-shaped data, that means Error nodes are embedded at fault sites so downstream traversal continues working; for flat data (e.g., a JSON `Value`), that means a reasonable fallback (e.g., "last value wins" on duplicate keys). It is not a partial prefix that stops at the first problem — callers should be able to ignore the diagnostics and still process the value. If no such fallback exists for a given failure mode, that mode belongs in the `raise` channel, not in diagnostics.
 
 ## Error Type Design
 
@@ -294,6 +298,8 @@ catch {
 
 When reviewing FFI boundary code, trace all reachable functions and verify they use `fail` (catchable) instead of `abort` for non-corruption failures.
 
+**Exception — the "no safe recovery" carve-out.** The audit's goal is to eliminate `abort` from FFI-reachable paths *when catching and continuing is safe*. It is not to eliminate `abort` universally. When continuing after a caught error would corrupt subsequent operations (see "No safe recovery = abort" in Decision Framework above), the `abort` is the correct outcome and the audit result is "intentionally retained." Document the rationale inline. Classic example: a CST/AST builder with stack-shaped state — an unbalanced `finish_node` means future calls will close unintended ancestors, so crashing the WASM module is preferable to silent tree corruption.
+
 ## Mutation Safety
 
 Any function that mutates shared state and can `raise` must satisfy one of:
@@ -423,6 +429,8 @@ When package A calls package B which raises `BError`:
 | B is replaceable | Wrap — A's API must be independent of B | Translate to A's own error vocabulary |
 
 ## Audit Process
+
+The process below is written for auditing existing `abort` calls, but the same four steps apply when **designing new** fallible APIs — substitute "for each new `raise` / `fail` / `abort` site" for "for each abort site" in step 4, and the other steps carry over unchanged.
 
 When auditing `abort` calls for conversion to `fail`/`raise`:
 
