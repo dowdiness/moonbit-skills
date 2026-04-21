@@ -18,7 +18,7 @@ Five subcommands covering two concerns: **code health** (default, check, fix) an
 - `/moonbit-housekeeping check` — fast read-only health check: git + lint + sync (Haiku, ~$0.04)
 - `/moonbit-housekeeping fix` — full check + auto-fix only, no destructive prompts (Haiku, ~$0.06)
 - `/moonbit-housekeeping triage` — project direction: backlog + branch pruning + recommendations (Sonnet, ~$1-2)
-- `/moonbit-housekeeping release` — pre-release prep: changelog + api-review + doc-drift (Sonnet, ~$3-5)
+- `/moonbit-housekeeping release` — pre-release prep: changelog + api-review + doc-drift (Sonnet, ~$3-5). Does **not** re-check git / lint / build / test — run `/moonbit-housekeeping` (default) first if those haven't been verified.
 - `/moonbit-housekeeping help` — display TUTORIAL.md
 
 ## When to Use
@@ -160,7 +160,7 @@ OUTPUT SCHEMA:
   },
   "destructive_candidates": [],
   "truncated": false,
-  "tool_calls_used": 20
+  "tool_calls_used": 15
 }
 
 Only include categories that were requested. Omit skipped categories from the JSON.
@@ -216,11 +216,11 @@ WORKFLOW:
    echo "=== MERGED ===" ; git branch --merged main | grep -v main ;
    echo "=== BRANCH_DATES ===" ; git for-each-ref --sort=committerdate refs/heads/ --format='%(refname:short) %(committerdate:short) %(subject)'
 
-3. Extract all plan file references (docs/plans/*.md paths). Check which exist and list all plans in ONE Bash call:
+3. Parse `docs/plans/*.md` references from the TODO.md content read in step 1 — call this set TODO_PLAN_REFS. If TODO.md is missing or TODO_PLAN_REFS is empty, skip the existence check and proceed to step 4. Otherwise, in ONE Bash call (substitute TODO_PLAN_REFS with the parsed paths, space-separated):
    echo "=== PLANS ===" ; ls docs/plans/*.md 2>/dev/null ;
-   for f in <list of paths from TODO>; do echo "=== $f ===" ; test -f "$f" && echo "EXISTS" || echo "MISSING" ; done
+   for f in TODO_PLAN_REFS; do echo "=== $f ===" ; test -f "$f" && echo "EXISTS" || echo "MISSING" ; done
 
-4. Check for completion evidence using moon ide (preferred) or grep fallback for key TODO symbols.
+4. Check for completion evidence. For each TODO item, identify 1–3 key symbols it names (function names, type names, or file paths). Use `moon ide find-references <symbol>` if moon ide is available; otherwise fall back to `grep -rn <symbol> src/ examples/ 2>/dev/null`. A TODO item that references a symbol now implemented with a non-trivial body is likely "done".
 
 5. Cross-reference TODO items with GitHub issues:
    - TODO items matching closed issues → likely "done"
