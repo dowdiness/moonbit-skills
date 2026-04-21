@@ -263,11 +263,15 @@ When a **new variant** is added (e.g., `DivSym`):
 
 The key insight: *the cost of change is localized.*
 
+**Who is this "local" to?** The localization is honest only from the *library author's* perspective — `ConcreteExpr` and `replay` live in your package, so you can edit them when adding a variant. From a **plugin author's** perspective, Two-Layer does *not* give data-axis extensibility: to ship a new variant with full structural-pass support, the plugin must edit (or coordinate an update to) the core library. And a **consumer** who writes their own `ConcreteExpr`-matching passes still faces exhaustiveness errors on every new variant — just as they would in Solution 2. The benefit of Two-Layer is limited to consumers who stay on the *tagless* API.
+
+If you need both (a) data-axis extensibility by independent plugins and (b) structural observation on plugin-defined variants, no solution in this document fully delivers — you must relax one. Pure Finally Tagless (Solution 1) keeps plugins independent at the cost of structural passes; Two-Layer keeps structural passes at the cost of an open plugin ecosystem.
+
 ### Scorecard
 
 | Property | Status |
 |----------|--------|
-| New variants | ✓ (tagless layer unchanged; enum changes localized) |
+| New variants | ✓ (tagless + interpretations unchanged; enum + `replay` changes localized to the owning package — *not* open to independent plugins) |
 | New operations | ✓ (new struct + impls) |
 | Pattern matching | ✓ (via ConcreteExpr) |
 | Type safety | ✓ |
