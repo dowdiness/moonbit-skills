@@ -18,11 +18,12 @@ We spent hours designing and implementing binary lifting jump pointers to replac
 2. Check staleness        → When was this measured? What changed since?
 3. Check mitigations      → Is there already a batch mode, cache, or lazy eval?
 4. Write microbenchmark   → Isolate the exact operation claimed to be slow
-5. Run benchmark          → Does it demonstrate the problem?
-   no  → STOP. Report finding. Find the real bottleneck.
-   yes → Prototype fix (50 lines, no spec) → benchmark again
-         improved? → THEN consider full design cycle if needed
-         not improved? → STOP. Wrong approach.
+5. Run benchmark          → Does it reproduce the claimed cost?
+   no      → STOP. Report finding. Find the real bottleneck.
+   partial → Report actual cost. User decides if worth optimizing (often no).
+   yes     → Prototype fix (50 lines, no spec) → benchmark again
+             improved?     → THEN consider full design cycle if needed
+             not improved? → STOP. Wrong approach.
 ```
 
 ## Step 1: Identify the Claim
@@ -34,6 +35,8 @@ What specific operation is claimed to be slow? Extract:
 - The **context** (e.g., "per keystroke during live collaboration")
 
 ## Step 2: Check Staleness
+
+**If there is no prior measurement at all** — e.g., the claim is pure asymptotic reasoning ("it's O(n²)") or intuition ("this feels slow") — treat this as worse than stale. Skip to Step 4 and write the microbenchmark. The HARD RULE applies with *more* force when no measurement has ever been taken, not less: there is no data point to verify against, so the benchmark becomes the first evidence either way.
 
 ```bash
 # When was this measurement taken?
