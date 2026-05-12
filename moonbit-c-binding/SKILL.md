@@ -247,7 +247,7 @@ struct Settings(Bytes)  // value type, backed by GC-managed Bytes
 struct Node(Bytes)      // small value struct
 ```
 
-**Safe constructors and methods:**
+**Safe factory wrappers and methods:**
 
 ```mbt nocheck
 ///|

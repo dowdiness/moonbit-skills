@@ -24,9 +24,14 @@ pub(all) struct Pos {
   priv value : Int
 } derive(Debug, Eq)
 
-///| Factory function with validation
-pub fn Pos::at(value : Int) -> Pos {
-  { value: if value < 0 { 0 } else { value } }
+suberror PosError {
+  NegativePos
+} derive(Debug)
+
+///| Custom constructor with validation; call as Pos(value)
+pub fn Pos::Pos(value : Int) -> Pos raise PosError {
+  guard value >= 0 else { raise NegativePos }
+  { value, }
 }
 
 ///| Accessor
@@ -41,7 +46,7 @@ pub fn Pos::value(self : Pos) -> Int {
 |-----------|---------|
 | `pub(all) struct` | Type visible everywhere |
 | `priv` field | Internals hidden from users |
-| Factory function | Controlled construction with validation |
+| Custom constructor or named factory | Controlled construction with validation |
 | Accessors | Controlled read access to internals |
 | `derive(Debug, Eq)` | Standard traits still work |
 
@@ -68,8 +73,13 @@ pub(all) struct UserId {
   priv id : String
 } derive(Debug, Eq, Hash)
 
-pub fn UserId::new(id : String) -> UserId? {
-  if id.length() > 0 { Some({ id, }) } else { None }
+suberror UserIdError {
+  EmptyUserId
+} derive(Debug)
+
+pub fn UserId::UserId(id : String) -> UserId raise UserIdError {
+  guard id.length() > 0 else { raise EmptyUserId }
+  { id, }
 }
 
 pub fn UserId::to_string(self : UserId) -> String {
@@ -145,12 +155,12 @@ pub(all) struct Range {
   end : Pos
 } derive(Debug, Eq)
 
-pub fn Range::new(start : Pos, end : Pos) -> Range {
+pub fn Range::Range(start : Pos, end : Pos) -> Range {
   { start, end }
 }
 
-pub fn Range::from_ints(start : Int, end : Int) -> Range {
-  { start: Pos::at(start), end: Pos::at(end) }
+pub fn Range::from_ints(start : Int, end : Int) -> Range raise PosError {
+  Range(Pos(start), Pos(end))
 }
 ```
 

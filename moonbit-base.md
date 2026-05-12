@@ -10,7 +10,7 @@
 | Bail out early             | `guard`                             | `if ... { return }`           |
 | Branch on variants         | `match`                             | chained `if/else`             |
 | Simple boolean             | `if/else`                           |                               |
-| Struct construction        | custom `fn new()` inside body       | bare `{ field: value }`       |
+| Struct construction        | custom `fn Type::Type(...)` constructor | bare `{ field: value }`       |
 | Empty callback body        | `() => ()`                          | `() => {}` (map literal!)     |
 | Tuple field access         | `.0`                                | `._` (deprecated)             |
 | Fallible return type       | `T!Error` with `!` propagation      | `try?` (won't catch abort)    |
@@ -148,30 +148,26 @@ grep -rn '() => {}' <pkg>/*.mbt                      # Empty callback anti-patte
 ## Functions & Types
 
 - **Arrow functions:** `() => expr` (zero params, single expression), `() => { stmts }` (multi-statement), `x => expr` (one param), `(x, y) => expr` (multiple params). Empty body: `() => ()` — not `() => {}` which MoonBit parses as a map literal. Named functions (`pub fn`, `fn name(...)`) are unaffected.
-- **Custom constructors for structs:** Declare a custom constructor via `fn new(...)` inside the struct body. This enables `StructName(args)` construction syntax with labelled/optional parameters, validation, and defaults. Applies regardless of visibility — `pub`, `pub(all)`, and `priv` structs all benefit from consistent call syntax and future-proof validation hooks. Prefer this over bare struct literals `{ field: value }`.
+- **Custom constructors for structs:** Define a constructor method whose name matches the struct type: `fn Type::Type(...) -> Type`. This enables `Type(args)` construction syntax with labelled/optional parameters, validation, defaults, and `raise` when construction is fallible. Applies regardless of visibility — `pub`, `pub(all)`, and `priv` structs all benefit from consistent call syntax and future-proof validation hooks. Prefer this over bare struct literals `{ field: value }`.
   ```moonbit
   struct MyStruct {
     x : Int
     y : Int
-
-    fn new(x~ : Int, y? : Int) -> MyStruct  // declaration inside struct
   } derive(Debug)
 
-  fn MyStruct::new(x~ : Int, y? : Int = x) -> MyStruct {  // implementation
+  fn MyStruct::MyStruct(x~ : Int, y? : Int = x) -> MyStruct {
     { x, y }
   }
 
   let s = MyStruct(x=1)  // usage — like enum constructors
   ```
-  **Generic structs** use `fn[T, U] new(...)` inside the body — type params on the `fn` keyword. Precedent: `@ref.Ref[T]` in MoonBit core (`core/ref/ref.mbt`).
+  **Generic structs** put type params on the constructor method.
   ```moonbit
   pub(all) struct Ref[T] {
     mut val : T
-
-    fn[T] new(value : T) -> Ref[T]  // generic: type params on `fn`
   }
 
-  fn[T] Ref::new(value : T) -> Ref[T] { { val: value } }
+  fn[T] Ref::Ref(value : T) -> Ref[T] { { val: value } }
 
   let r : Ref[Int] = Ref(42)
   ```

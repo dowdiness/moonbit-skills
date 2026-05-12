@@ -52,7 +52,7 @@ When splitting package `A` into `A` (facade) and `B` (extracted):
    ```
    `pub using` both re-exports to consumers AND makes names available locally in `A` — so code remaining in `A` can use `MyType` without the `@B.` prefix. Run `moon check` after this step.
 
-   **What re-exports automatically.** Listing `type Foo` re-exports the type *and* all of its methods and associated functions — `Foo::new()`, `x.method()` all resolve through `@A.Foo` unchanged. Do not list methods individually. Functions, constants, and traits must be listed by name. Trailing commas are allowed.
+   **What re-exports automatically.** Listing `type Foo` re-exports the type *and* all of its methods, associated functions, and custom constructor — `Foo(...)`, `x.method()` all resolve through `@A.Foo` unchanged. Do not list methods individually. Functions, constants, and traits must be listed by name. Trailing commas are allowed.
 
    **`pub using` forwards names, not permissions.** A `pub struct S` is read-only to external code (fields readable, but external code cannot construct `S::{...}` or write `mut` fields). Re-exporting does not change that — consumers of `@A` see the same visibility they would see importing directly from `@B`. If external construction or field mutation is required, declare the origin as `pub(all) struct S`, or expose a constructor / mutator method. Field-level `pub` modifiers are redundant in a `pub struct` (warning 0008) — the whole-struct modifier controls visibility.
 

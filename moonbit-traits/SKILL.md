@@ -438,8 +438,13 @@ pub(all) struct Pos {
   priv value : Int   // hidden from outside
 } derive(Debug, Eq)
 
-pub fn Pos::at(value : Int) -> Pos {
-  { value: if value < 0 { 0 } else { value } }
+suberror PosError {
+  NegativePos
+} derive(Debug)
+
+pub fn Pos::Pos(value : Int) -> Pos raise PosError {
+  guard value >= 0 else { raise NegativePos }
+  { value, }
 }
 
 pub fn Pos::value(self : Pos) -> Int { self.value }
@@ -449,14 +454,14 @@ pub fn Pos::value(self : Pos) -> Int { self.value }
 |-----------|---------|
 | `pub(all) struct` | Type visible everywhere |
 | `priv` field | Internals hidden from users |
-| Factory function | Controlled construction with validation |
+| Custom constructor or named factory | Controlled construction with validation |
 | Accessors | Controlled read access |
 
 **Important:** `priv` doesn't work with tuple structs. Use named fields.
 
 ### Patterns by Use Case
 
-- **Simple wrapper** (validation): `UserId::new(id) -> UserId?`
+- **Simple wrapper** (validation): `UserId::UserId(id) -> UserId raise UserIdError`, called as `UserId(id)` or `try? UserId(id)`
 - **Opaque wrapper** (hide complex type): `Version::from_frontier(f) -> Version`
 - **Rich API wrapper**: expose semantic methods (`is_insert`, `get_text`), not raw access
 - **Escape hatch**: `TextDoc::advanced(self) -> @internal.Document` for power users
