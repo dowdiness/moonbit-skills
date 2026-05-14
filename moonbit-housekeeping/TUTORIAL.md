@@ -3,22 +3,22 @@
 ## When to Use Which Subcommand
 
 ```
-Opening a session?           → /moonbit-housekeeping          (most common)
-Just want a quick glance?    → /moonbit-housekeeping check
-Finished a session?          → /moonbit-housekeeping fix
-Lost track of priorities?    → /moonbit-housekeeping triage
-About to cut a release?      → /moonbit-housekeeping release
+Opening a session?           -> moonbit-housekeeping          (most common)
+Just want a quick glance?    -> moonbit-housekeeping check
+Finished a session?          -> moonbit-housekeeping fix
+Lost track of priorities?    -> moonbit-housekeeping triage
+About to cut a release?      -> moonbit-housekeeping release
 ```
 
 ---
 
 ## Subcommands
 
-### `/moonbit-housekeeping` — full audit-and-fix (default)
+### `moonbit-housekeeping` - full audit-and-fix (default)
 
 The go-to command. Answers: **"is my repo healthy, and what can be cleaned up?"**
 
-Runs all phases (git, lint, sync, build, test), auto-fixes safe items, and surfaces destructive action candidates (stale branches, orphan worktrees) for your confirmation. Costs ~$0.08 (Haiku).
+Runs all phases (git, lint, sync, build, test), auto-fixes safe items, and surfaces destructive action candidates (stale branches, orphan worktrees) for your confirmation. Uses a mechanical worker profile.
 
 Use at the **start of every session** — it handles the most common maintenance in one pass.
 
@@ -49,11 +49,11 @@ Clean up these branches/worktrees? [y/N]
 
 ---
 
-### `/moonbit-housekeeping check` — read-only health check
+### `moonbit-housekeeping check` - read-only health check
 
 Quick sanity check. Answers: **"is my repo in a clean state right now?"**
 
-Checks git state, submodules, and lint. No modifications — read-only. Takes ~60s, costs ~$0.04 (Haiku).
+Checks git state, submodules, and lint. No modifications; read-only. Uses a mechanical worker profile.
 
 Use when you just want a **quick glance** without touching anything.
 
@@ -67,11 +67,11 @@ lint:  WARN  (2 files need formatting)
 sync:  PASS  (all submodules clean)
 ```
 
-> Run `/moonbit-housekeeping` to auto-fix 2 items.
+> Run `moonbit-housekeeping` to auto-fix 2 items.
 
 ---
 
-### `/moonbit-housekeeping fix` — full check + auto-fix only
+### `moonbit-housekeeping fix` - full check + auto-fix only
 
 Runs all phases and applies safe fixes, but does **not** prompt for destructive actions (branch/worktree cleanup). Use when you want auto-fix without the cleanup prompts.
 
@@ -81,11 +81,11 @@ Safe fixes applied automatically:
 - `moon info` — regenerate .mbti interface files
 - `moon test --update` — update test snapshots
 
-Use at the **end of a long session** before committing. Costs ~$0.06 (Haiku).
+Use at the **end of a long session** before committing. Uses a mechanical worker profile.
 
 ---
 
-### `/moonbit-housekeeping triage` — project direction
+### `moonbit-housekeeping triage` - project direction
 
 Answers: **"what should I work on next?"**
 
@@ -98,11 +98,11 @@ Reads `docs/TODO.md`, active plans, GitHub issues, and stale branches. Produces:
 
 Updates `docs/decisions-needed.md` with items needing a decision.
 
-Use **weekly** or when returning after a break and feeling unsure what to tackle. Costs ~$1-2 (Sonnet).
+Use **weekly** or when returning after a break and feeling unsure what to tackle. Uses a review worker profile.
 
 ---
 
-### `/moonbit-housekeeping release` — pre-release prep
+### `moonbit-housekeeping release` - pre-release prep
 
 Answers: **"is this ready to ship?"**
 
@@ -112,7 +112,7 @@ Runs three checks:
 - **api-review** — classifies `.mbti` changes as intentional / accidental / needs-review, flags breaking changes
 - **doc-drift** — checks dev docs, READMEs, and active plans for stale file paths and symbol references
 
-Use **before tagging a release or opening a major PR**. Costs ~$3-5 (Sonnet).
+Use **before tagging a release or opening a major PR**. Uses review worker profiles for changelog, API review, and doc drift.
 
 ---
 
@@ -143,12 +143,12 @@ Items with `confidence: low` or `needs-human-review` are flagged explicitly.
 
 ---
 
-## Cost Reference
+## Execution Profiles
 
-| Subcommand | Model | Per run |
+| Mode | Worker profile | Notes |
 |---|---|---|
-| `/moonbit-housekeeping` | Haiku | ~$0.08 |
-| `/moonbit-housekeeping check` | Haiku | ~$0.04 |
-| `/moonbit-housekeeping fix` | Haiku | ~$0.06 |
-| `/moonbit-housekeeping triage` | Sonnet | ~$1-2 |
-| `/moonbit-housekeeping release` | Sonnet | ~$3-5 |
+| `moonbit-housekeeping` | mechanical worker | Full audit, safe fixes, cleanup candidates |
+| `moonbit-housekeeping check` | mechanical worker | Fast read-only report |
+| `moonbit-housekeeping fix` | mechanical worker | Safe fixes only |
+| `moonbit-housekeeping triage` | review worker | Backlog, branches, next actions |
+| `moonbit-housekeeping release` | review workers | Changelog, API review, doc drift |

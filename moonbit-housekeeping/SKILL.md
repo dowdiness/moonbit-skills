@@ -14,24 +14,24 @@ Five subcommands covering two concerns: **code health** (default, check, fix) an
 
 ## Usage
 
-- `/moonbit-housekeeping` — full audit-and-fix: all phases, auto-fix safe items, ask before destructive actions (Haiku, ~$0.08)
-- `/moonbit-housekeeping check` — fast read-only health check: git + lint + sync (Haiku, ~$0.04)
-- `/moonbit-housekeeping fix` — full check + auto-fix only, no destructive prompts (Haiku, ~$0.06)
-- `/moonbit-housekeeping triage` — project direction: backlog + branch pruning + recommendations (Sonnet, ~$1-2)
-- `/moonbit-housekeeping release` — pre-release prep: changelog + api-review + doc-drift (Sonnet, ~$3-5). Does **not** re-check git / lint / build / test — run `/moonbit-housekeeping` (default) first if those haven't been verified.
-- `/moonbit-housekeeping help` — display TUTORIAL.md
+- `moonbit-housekeeping` — full audit-and-fix: all phases, auto-fix safe items, ask before destructive actions
+- `moonbit-housekeeping check` — fast read-only health check: git + lint + sync
+- `moonbit-housekeeping fix` — full check + auto-fix only, no destructive prompts
+- `moonbit-housekeeping triage` — project direction: backlog + branch pruning + recommendations
+- `moonbit-housekeeping release` — pre-release prep: changelog + api-review + doc-drift. Does **not** re-check git / lint / build / test; run `moonbit-housekeeping` first if those have not been verified.
+- `moonbit-housekeeping help` — display TUTORIAL.md
 
 ## When to Use
 
-- **Start of session** → `/moonbit-housekeeping` (most common)
-- **Read-only glance** → `/moonbit-housekeeping check`
-- **End of long session** → `/moonbit-housekeeping fix`
-- **Weekly / re-orienting** → `/moonbit-housekeeping triage`
-- **Before release or major PR** → `/moonbit-housekeeping release`
+- **Start of session** -> `moonbit-housekeeping` (most common)
+- **Read-only glance** -> `moonbit-housekeeping check`
+- **End of long session** -> `moonbit-housekeeping fix`
+- **Weekly / re-orienting** -> `moonbit-housekeeping triage`
+- **Before release or major PR** -> `moonbit-housekeeping release`
 
 ## Execution
 
-### Step 1: Preflight (Opus)
+### Step 1: Preflight (coordinator)
 
 ```bash
 which moon
@@ -41,44 +41,46 @@ If `moon` is not on PATH, report the error and stop.
 
 ### Step 2: Determine subcommand
 
-| Input | Mode | Model | Categories |
-|-------|------|-------|------------|
-| (none) | audit | haiku | git, lint, sync, build, test |
-| `check` | report | haiku | git, lint, sync |
-| `fix` | fix | haiku | git, lint, sync, build, test |
-| `triage` | report+prune | sonnet | triage |
-| `release` | report | sonnet | changelog, api-review, doc-drift |
-| `help` / `tutorial` | — | none | display TUTORIAL.md |
+| Input | Mode | Worker profile | Categories |
+|-------|------|----------------|------------|
+| (none) | audit | mechanical worker | git, lint, sync, build, test |
+| `check` | report | mechanical worker | git, lint, sync |
+| `fix` | fix | mechanical worker | git, lint, sync, build, test |
+| `triage` | report+prune | review worker | triage |
+| `release` | report | review workers | changelog, api-review, doc-drift |
+| `help` / `tutorial` | none | none | display TUTORIAL.md |
 
 ### Step 2b: Handle help/tutorial
 
-Read `TUTORIAL.md` from the same directory as this skill file and display its contents. Do not dispatch any subagents. Stop here.
+Read `TUTORIAL.md` from the same directory as this skill file and display its contents. Do not run any workers. Stop here.
 
-### Step 3: Dispatch subagents
+### Step 3: Run workers
 
-**Default (audit):** Dispatch one Haiku subagent using the Haiku Prompt Template with MODE=audit and CATEGORIES=git,lint,sync,build,test. After receiving output:
+If the host agent supports delegated workers or parallel agent tasks, run the worker templates separately. If it does not, execute the same template workflow in the current agent and keep the same JSON output contract.
+
+**Default (audit):** Run one mechanical worker using the Mechanical Worker Prompt Template with MODE=audit and CATEGORIES=git,lint,sync,build,test. After receiving output:
 1. Auto-fix safe items (same as fix mode whitelist: moon fmt, moon info, moon test --update).
 2. Detect destructive action candidates from git phase: stale branches (merged into main), orphan worktrees, branches with no activity >30 days and no open PR.
-3. If destructive candidates found: display them with last-commit dates and ask "Clean up these branches/worktrees? [y/N]". If confirmed, dispatch a Haiku prune subagent (same as triage prune template).
+3. If destructive candidates found: display them with last-commit dates and ask "Clean up these branches/worktrees? [y/N]". If confirmed, run a mechanical prune worker using the triage prune template.
 4. Render the unified report.
 
-**Check:** Dispatch one Haiku subagent using the Haiku Prompt Template with MODE=report and CATEGORIES=git,lint,sync.
+**Check:** Run one mechanical worker using the Mechanical Worker Prompt Template with MODE=report and CATEGORIES=git,lint,sync.
 
-**Fix:** Dispatch one Haiku subagent using the Haiku Prompt Template with MODE=fix and CATEGORIES=git,lint,sync,build,test.
+**Fix:** Run one mechanical worker using the Mechanical Worker Prompt Template with MODE=fix and CATEGORIES=git,lint,sync,build,test.
 
-**Triage:** Dispatch one Sonnet subagent using the Triage Prompt Template. After receiving output:
+**Triage:** Run one review worker using the Triage Worker Prompt Template. After receiving output:
 1. Write `docs/decisions-needed.md` using the Decisions-Needed format below — add new `needs-human-review` items, preserve existing human notes, remove items now classified as "done".
-2. If `prune_candidates` is non-empty: display the list with last-commit dates and ask "Prune these? [y/N]". If confirmed, dispatch a second Haiku subagent to execute the pruning.
+2. If `prune_candidates` is non-empty: display the list with last-commit dates and ask "Prune these? [y/N]". If confirmed, run a mechanical prune worker to execute the pruning.
 
-**Release:** Dispatch three Sonnet subagents in parallel — changelog, api-review, doc-drift — each using its respective prompt template.
+**Release:** Run three review workers, in parallel when supported: changelog, api-review, doc-drift. Each uses its respective prompt template.
 
-### Step 4: Render report (Opus)
+### Step 4: Render report (coordinator)
 
-Parse JSON output from all subagents. Render the unified report (format below). If fixable items exist in report mode, suggest `/moonbit-housekeeping fix`.
+Parse JSON output from all workers. Render the unified report (format below). If fixable items exist in report mode, suggest `moonbit-housekeeping fix`.
 
 ---
 
-## Haiku Subagent Prompt Template
+## Mechanical Worker Prompt Template
 
 ~~~
 You are a housekeeping agent for a MoonBit project. Run mechanical repo checks and output structured JSON.
@@ -90,7 +92,7 @@ WORKING DIRECTORY: {CWD}
 RULES:
 - MINIMIZE tool calls. Batch multiple commands into single Bash calls using && or ;
 - Maximum 18 tool calls. If approaching the limit, report what you have and stop.
-- Output ONLY a single JSON object matching the schema below. No prose before or after.
+- OUTPUT FORMAT: respond with the JSON object matching the schema below only. Zero preamble ("Now I have...", "Let me analyze..."), zero trailing commentary. Code-fence wrapper is fine; raw prose is not.
 - Discover submodules dynamically: parse .gitmodules for paths.
 - Discover test targets dynamically: check for moon.mod.json in each submodule directory.
 - Skip categories not in {CATEGORIES}.
@@ -108,9 +110,16 @@ Run ALL of these in ONE Bash call:
   echo "=== PRS ===" ; gh pr list --state open --json number,title,headRefName,statusCheckRollup 2>/dev/null || echo "gh not available" ;
   echo "=== SUBMODULES ===" ; git submodule status ;
   echo "=== UNTRACKED ===" ; git ls-files --others --exclude-standard ;
-  echo "=== BRANCH_DATES ===" ; git for-each-ref --sort=committerdate refs/heads/ --format='%(refname:short) %(committerdate:short) %(subject)'
+  echo "=== BRANCH_DATES ===" ; git for-each-ref --sort=committerdate refs/heads/ --format='%(refname:short) %(committerdate:short) %(subject)' ;
+  echo "=== VERSION_TAG_DRIFT ===" ; VER=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' moon.mod.json 2>/dev/null | head -1) ; if [ -n "$VER" ]; then TAG_SHA=$(git rev-parse "v$VER^{commit}" 2>/dev/null || git rev-parse "$VER^{commit}" 2>/dev/null) ; HEAD_SHA=$(git rev-parse HEAD) ; if [ -z "$TAG_SHA" ]; then echo "version=$VER tag=absent" ; elif [ "$TAG_SHA" = "$HEAD_SHA" ]; then echo "version=$VER tag=aligned" ; else echo "version=$VER tag_commit=${TAG_SHA:0:7} head_commit=${HEAD_SHA:0:7} drift=$(git rev-list --count $TAG_SHA..HEAD)_ahead" ; fi ; fi
 
 For submodules, note if any are dirty (+prefix) or on detached HEAD.
+For VERSION_TAG_DRIFT: if the output shows `drift=N_ahead`, emit a severity-warning
+item in the git phase: "version {VER} tag is at {tag_commit}, HEAD is at {head_commit}
+({N} commits ahead) — do not publish at this version until the tag is moved to HEAD
+or a new version is cut". The `tag=aligned` and `tag=absent` cases produce no item.
+This check catches the "published tag points to a different commit than the tree
+being published" class of release mistake.
 
 ---
 
@@ -186,11 +195,13 @@ SEVERITY RULES:
 FIXABLE RULES:
 - Set "fixable": true ONLY for: formatting changes (moon fmt), interface regeneration (moon info), snapshot updates (moon test --update)
 - Everything else is "fixable": false
+
+REMEMBER: Response = JSON object only. No preamble, no trailing commentary.
 ~~~
 
 ---
 
-## Triage Subagent Prompt Template
+## Triage Worker Prompt Template
 
 ~~~
 You are a triage agent for a MoonBit project. Assess backlog freshness, identify stale branches, and produce project direction output as structured JSON.
@@ -199,7 +210,7 @@ WORKING DIRECTORY: {CWD}
 
 RULES:
 - Maximum 30 tool calls. Batch aggressively.
-- Output ONLY a single JSON object. No prose.
+- OUTPUT FORMAT: respond with the JSON object only. Zero preamble ("Now I have...", "Let me analyze..."), zero trailing commentary. Code-fence wrapper is fine; raw prose is not.
 - Separate observations from judgment.
 - If uncertain, classify as "needs-human-review", not "done".
 - Step 8 (synthesis) is lowest priority — skip it if tool_calls_used >= 25 and set recommendations to [].
@@ -291,11 +302,13 @@ CLASSIFICATION RULES:
 - "blocked": plan explicitly says blocked or waiting on dependency (confidence: high)
 - "stale": no plan file, no recent git activity, no code evidence (confidence: medium)
 - "needs-human-review": mixed signals or insufficient evidence (confidence: low)
+
+REMEMBER: Response = JSON object only. No preamble, no trailing commentary.
 ~~~
 
-### Triage Prune Subagent Prompt Template
+### Triage Prune Worker Prompt Template
 
-Only dispatched after Opus asks "Prune these? [y/N]" and user confirms.
+Only run after the coordinator asks "Prune these? [y/N]" and the user confirms.
 
 ~~~
 You are a cleanup agent. Execute branch and worktree pruning commands exactly as specified. Report what you did.
@@ -314,9 +327,9 @@ Output a plain text summary: what was pruned, what was skipped and why.
 
 ---
 
-## Release Subagent Prompt Templates
+## Release Worker Prompt Templates
 
-Three agents dispatched in parallel. Each outputs structured JSON.
+Three review workers run in parallel when supported. Each outputs structured JSON.
 
 ### Changelog Prompt
 
@@ -327,7 +340,7 @@ WORKING DIRECTORY: {CWD}
 
 RULES:
 - Maximum 25 tool calls. Batch aggressively.
-- Output ONLY a single JSON object. No prose.
+- OUTPUT FORMAT: respond with the JSON object only. Zero preamble ("Now I have...", "Let me analyze..."), zero trailing commentary. Code-fence wrapper is fine; raw prose is not.
 
 WORKFLOW:
 1. Find the base reference in ONE call:
@@ -360,6 +373,8 @@ OUTPUT SCHEMA:
   "truncated": false,
   "tool_calls_used": 5
 }
+
+REMEMBER: Response = JSON object only. No preamble, no trailing commentary.
 ~~~
 
 ### API Review Prompt
@@ -371,7 +386,7 @@ WORKING DIRECTORY: {CWD}
 
 RULES:
 - Maximum 25 tool calls. Batch aggressively.
-- Output ONLY a single JSON object. No prose.
+- OUTPUT FORMAT: respond with the JSON object only. Zero preamble ("Now I have...", "Let me analyze..."), zero trailing commentary. Code-fence wrapper is fine; raw prose is not.
 - Separate observations (what changed) from judgment (is it intentional).
 
 WORKFLOW:
@@ -412,6 +427,8 @@ CLASSIFICATION RULES:
 - "accidental": no corresponding source change, likely drift from moon info regeneration
 - "needs-review": unclear intent, mixed signals
 - Removed public symbols are always severity "warning" or "error"
+
+REMEMBER: Response = JSON object only. No preamble, no trailing commentary.
 ~~~
 
 ### Doc Drift Prompt
@@ -423,7 +440,7 @@ WORKING DIRECTORY: {CWD}
 
 RULES:
 - Maximum 25 tool calls. Batch aggressively.
-- Output ONLY a single JSON object. No prose.
+- OUTPUT FORMAT: respond with the JSON object only. Zero preamble ("Now I have...", "Let me analyze..."), zero trailing commentary. Code-fence wrapper is fine; raw prose is not.
 - ONLY check development docs, READMEs, and plan references.
 - Do NOT check docs/architecture/ — those describe principles, not symbols.
 - Do NOT check submodule docs — different ownership.
@@ -469,11 +486,13 @@ OUTPUT SCHEMA:
   "truncated": false,
   "tool_calls_used": 15
 }
+
+REMEMBER: Response = JSON object only. No preamble, no trailing commentary.
 ~~~
 
 ---
 
-## Report Format (Opus renders this from JSON)
+## Report Format (coordinator renders this from JSON)
 
 ### Default (audit) / Fix report
 
@@ -500,7 +519,7 @@ If audit mode and `destructive_candidates` is non-empty, append:
 Clean up these branches/worktrees? [y/N]
 ```
 
-If confirmed, dispatch a Haiku prune subagent (same template as triage prune).
+If confirmed, run a mechanical prune worker using the triage prune template.
 
 ### Check report
 
@@ -531,7 +550,7 @@ decisions-needed: updated  ({N} added, {N} resolved)
 
 If prune_candidates is non-empty, show the list and ask: "Prune these branches/worktrees? [y/N]"
 
-### Decisions-Needed Format (Opus writes this after triage)
+### Decisions-Needed Format (coordinator writes this after triage)
 
 Read `docs/decisions-needed.md` if it exists. Then:
 - **Add** items with `classification: needs-human-review` not already present
@@ -557,6 +576,33 @@ Format for new items:
 changelog:  {STATUS}  ({N} commits → suggested bump: {minor/patch/none})
 api-review: {STATUS}  ({N} changes: {N} intentional, {N} needs review, {N} breaking)
 doc-drift:  {STATUS}  ({N} docs checked, {N} stale references)
+
+### Publishing sequence (when ready)
+
+This skill produces release *artifacts*. It does NOT tag, release, or publish —
+those are irreversible and stay under user control. The order that avoids
+drift between tag, GitHub release, and mooncakes:
+
+1. Review the changelog draft. Amend claims like "all X" / "full Y" / "complete
+   support for Z" that the in-house api-review agent cannot verify against
+   external facts (it reasons from diffs, not from spec knowledge).
+2. Run external independent review (e.g. Codex or similar) on the changelog.
+   The in-house api-review catches mechanical/structural issues; external
+   review catches substantive claims. Amend per findings.
+3. ONLY THEN, as one atomic sequence:
+     - `git tag -a vX.Y.Z -m "..."`
+     - `git push origin vX.Y.Z`
+     - `gh release create vX.Y.Z --notes-file CHANGELOG.md`
+     - `moon publish --dry-run`  (inspect bundle contents)
+     - `moon publish`            (irreversible on mooncakes)
+
+Do not tag before step 2. Mooncakes publishes are permanently immutable; a
+tag pointing at a different commit than the published bundle cannot be
+fixed retroactively without either force-moving the tag (only safe if
+zero consumers have cached it) or cutting a new version for a docs fix.
+
+Dry-run note: `moon publish --dry-run` can exit 255 on success — trust the
+`Server status: 2xx` line, not the shell exit code.
 ```
 
 ### Details section (any report with warnings/errors)
@@ -574,7 +620,7 @@ doc-drift:  {STATUS}  ({N} docs checked, {N} stale references)
 
 If MODE was "fix", list what was auto-fixed.
 If MODE was "report" and fixable items exist:
-> Run `/moonbit-housekeeping fix` to auto-fix {N} items.
+> Run `moonbit-housekeeping fix` to auto-fix {N} items.
 
 ---
 
@@ -587,12 +633,12 @@ ONLY these operations are allowed in fix mode:
 
 Never `git pull`, `git push`, `git stash`, checkout branches, modify source logic, delete files, or commit.
 
-Branch/worktree pruning is handled by the triage prune subagent after explicit user confirmation — never in fix mode.
+Branch/worktree pruning is handled by the triage prune worker after explicit user confirmation — never in fix mode.
 
 ## Guardrails
 
 - Default mode is **read-only**. Phase 2 changes are reverted after phase 3 in report mode.
-- 25 tool-call hard limit prevents runaway subagents.
+- Tool-call limits in worker templates prevent runaway execution.
 - Dynamic discovery (`.gitmodules`, `moon.mod.json`) prevents hardcoded staleness.
 - Build failures in `examples/web/` due to missing `node_modules` are reported as skipped, not failed.
 - If `gh` CLI is not available, PR and issue checks are skipped gracefully.

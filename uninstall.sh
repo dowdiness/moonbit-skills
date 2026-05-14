@@ -2,27 +2,51 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
-SKILLS_DIR="$HOME/.claude/skills"
 
-[ -d "$SKILLS_DIR" ] || exit 0
+unlink_skills() {
+  local skills_dir="$1"
+  local raw_target=""
+  local resolved_target=""
 
-for link in "$SKILLS_DIR"/*/; do
-  [ -L "${link%/}" ] || continue
-  target="$(readlink -f "${link%/}")"
+  [ -d "$skills_dir" ] || return 0
+
+  for link in "$skills_dir"/*/; do
+    [ -L "${link%/}" ] || continue
+    raw_target="$(readlink "${link%/}")" || raw_target=""
+    resolved_target="$(readlink -f "${link%/}" 2>/dev/null)" || resolved_target=""
+    case "$raw_target" in
+      "$REPO_DIR"/*)
+        rm "${link%/}"
+        echo "Removed: ${link%/}"
+        continue
+        ;;
+    esac
+    case "$resolved_target" in
+      "$REPO_DIR"/*)
+        rm "${link%/}"
+        echo "Removed: ${link%/}"
+        ;;
+    esac
+  done
+}
+
+unlink_base() {
+  local config_dir="$1"
+  local link="$config_dir/moonbit-base.md"
+
+  [ -L "$link" ] || return 0
+  target="$(readlink -f "$link")" || return 0
   case "$target" in
     "$REPO_DIR"/*)
       rm "$link"
-      echo "Removed: $(basename "${link%/}")"
+      echo "Removed: $link"
       ;;
   esac
-done
+}
 
-if [ -L "$HOME/.claude/moonbit-base.md" ]; then
-  target="$(readlink -f "$HOME/.claude/moonbit-base.md")"
-  case "$target" in
-    "$REPO_DIR"/*)
-      rm "$HOME/.claude/moonbit-base.md"
-      echo "Removed: moonbit-base.md"
-      ;;
-  esac
-fi
+unlink_skills "$HOME/.claude/skills"
+unlink_skills "$HOME/.agents/skills"
+unlink_skills "$HOME/.codex/skills"
+unlink_base "$HOME/.claude"
+unlink_base "$HOME/.agents"
+unlink_base "$HOME/.codex"
