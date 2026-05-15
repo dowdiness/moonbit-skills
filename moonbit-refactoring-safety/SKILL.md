@@ -94,7 +94,7 @@ Splitting package `A` (the existing public package) by extracting its internals 
 
 ### Step 1 — Create `B`, move source files
 
-Create a new directory `B/` with an empty `moon.pkg`, move the relevant source files there. Do not yet touch `A`'s `moon.pkg`.
+Create a new directory `B/` with an empty package manifest (either `moon.pkg` or `moon.pkg.json` — both are valid; `moon new` generates the `.json` form, but a literally-empty `moon.pkg` is enough to declare the package). Move the relevant source files there. Do not yet touch `A`'s manifest.
 
 ### Step 2 — Re-export via `pub using` in the facade
 
@@ -136,20 +136,20 @@ Fix by making necessary functions `pub` in `B`. If consumers of `A` need them to
 
 Run `moon info` and inspect `git diff A/pkg.generated.mbti`. The interface file is the source of truth for what consumers of `A` see.
 
-Verified `.mbti` shape after re-exporting `type Store, put` from `@internals`:
+Verified `.mbti` shape after re-exporting `type Store, put` from `@B`:
 
 ```
 // A/pkg.generated.mbti (excerpt)
-import { "internals" }
+import { "B" }
 
 // Values
-pub fn put(@internals.Store, String, Int) -> Unit      // function: inlined with origin types
+pub fn put(@B.Store, String, Int) -> Unit      // function: inlined with origin types
 
 // Type aliases
-pub using @internals {type Store}                       // type: under "Type aliases" section
+pub using @B {type Store}                       // type: under "Type aliases" section
 ```
 
-Functions get inlined as ordinary forwarded signatures whose parameter and return types reference the canonical origin (`@internals.Store`). Types land in the `Type aliases` section of the `.mbti` as `pub using @origin {type Name}` lines. Consumer code written against `@A.Store` / `@A.put` still compiles unchanged.
+Functions get inlined as ordinary forwarded signatures whose parameter and return types reference the canonical origin (`@B.Store`). Types land in the `Type aliases` section of the `.mbti` as `pub using @origin {type Name}` lines. Consumer code written against `@A.Store` / `@A.put` still compiles unchanged.
 
 If the `.mbti` diff shows any change you didn't intend (a removed symbol, a changed signature, an unexpected origin path), the split has leaked. Stop and fix before continuing.
 
