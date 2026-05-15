@@ -232,6 +232,35 @@ for i in 0..<len {
 }
 ```
 
+#### Prefer List Comprehensions for Build-and-Return Loops (v0.9.2)
+
+When a loop's only job is to build a fresh collection from another one (`Array::new()` + `push` in a loop, then return), use a list comprehension. The body is restricted to a single expression — if you need control flow (`break`, `continue`, early `return`), keep the explicit loop.
+
+```mbt
+// Before — explicit accumulator
+fn doubled(xs : Array[Int]) -> Array[Int] {
+  let out = Array::new()
+  for x in xs {
+    out.push(x * 2)
+  }
+  out
+}
+
+// After — list comprehension
+fn doubled(xs : Array[Int]) -> Array[Int] {
+  [ for x in xs => x * 2 ]
+}
+
+// With filtering — `if` goes before `=>`
+fn evens(xs : Array[Int]) -> Array[Int] {
+  [ for x in xs if x % 2 == 0 => x ]
+}
+```
+
+The same `[ for ... => ... ]` shape produces `Array`, `String`, `Bytes`, or lazy `Iter` depending on the target type. Iter-typed contexts evaluate elements eagerly when written as a literal; use `[ a, ..it, b ]` to thread lazy iteration through.
+
+**When to keep the explicit loop:** body needs `break`/`continue`/early return, body has side effects beyond producing a value, or you're aggregating into something other than a single collection (e.g., updating a `let mut` accumulator).
+
 ## Loop Specs (Dafny-Style Comments)
 - Add specs for functional-state loops — the `for i = 0, acc = 0; cond; { ... } else { acc }` form that threads state through the header.
 - Skip invariants for simple loops: `for x in xs`, range loops like `for i in 1..<xs.length()`, and range loops that accumulate into an external `let mut acc` are all "simple" in this sense.
@@ -325,6 +354,10 @@ Check code against these before committing. CI with `-w @a` will fail on depreca
 | `else { }` in for nobreak | `nobreak { }` |
 | `loop (xs, 0) { ... }` | `for x in xs; acc = 0 { ... }` |
 | `tuple._` | `tuple.0` |
+| `type T Underlying` (old newtype) | `struct T(Underlying)` (v0.9.2 removal) |
+| Local mutually recursive `fn` | `letrec` (v0.9.2 removal) |
+| Dual-signature struct constructor | `fn T::T(...) -> T { ... }` direct form (v0.9.2 deprecation) |
+| `derive(Show)` on tuple/array/map/set/Option/Result | `derive(Debug)` + `@debug.assert_eq` (v0.9.2 deprecation) |
 
 ### API Gotchas
 

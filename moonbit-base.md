@@ -120,6 +120,13 @@ grep -rn '() => {}' <pkg>/*.mbt                      # Empty callback anti-patte
   let mut acc = 0
   for i in 0..<n { acc += xs[i] }
   ```
+- **List comprehensions (v0.9.2):** `[ for x in xs => f(x) ]` builds an array; add `if cond` before `=>` to filter. The same `[ for ... => ... ]` shape constructs `Array`, `String`, `Bytes`, or lazy `Iter` based on the target type. Control-flow constructs (`break`, `continue`, etc.) are not currently allowed inside the body.
+  ```moonbit
+  let doubled : Array[Int] = [ for x in xs => x * 2 ]
+  let evens   : Array[Int] = [ for x in xs if x % 2 == 0 => x ]
+  let iter    : Iter[Int]  = [ for x in xs => x ]      // typed context selects Iter
+  ```
+- **Iterator construction from literals (v0.9.2):** An array literal in a context expecting `Iter` becomes an `Iter`, but element expressions are still evaluated eagerly. The spread form `[ a, ..it, b ]` is what triggers lazy evaluation of `it`'s side effects.
 - **Regex matching:** Use `s =~ re"pattern"` for regex. Patterns compose with `+` (concat), `|` (alternation), `as name` (captures), and `before=`/`after~` (surrounding text bindings).
   ```moonbit
   let s = "==abc=="
@@ -127,7 +134,7 @@ grep -rn '() => {}' <pkg>/*.mbt                      # Empty callback anti-patte
   let _ = s =~ (re"a" + re"bc", )                           // pattern composition
   let _ = s =~ (((re"x" as x) | re"b") + re"bc", before=y, after~) // captures + context
   ```
-- **Reverse pipeline `<|`:** Reduces nesting in DSL/view code. `f <| args` is equivalent to `f(args)`.
+- **Reverse pipeline `<|`:** Reduces nesting in DSL/view code. `f <| args` is equivalent to `f(args)`. As of v0.9.2, `<|` also supports method-call receivers, threading the right-hand side as the last argument: `obj.method(a, b) <| last_arg` desugars to `obj.method(a, b, last_arg)`.
   ```moonbit
   fn view() -> Html {
     div <| [
@@ -135,6 +142,9 @@ grep -rn '() => {}' <pkg>/*.mbt                      # Empty callback anti-patte
       ul <| [ li("item 1"), li("item 2") ],
     ]
   }
+
+  // v0.9.2 — method receiver on the LHS of <|
+  buf.write_section("body") <| render(children)
   ```
 - **StringView/ArrayView patterns:** Use `.view()` for prefix/suffix matching with `match`:
   ```moonbit
@@ -175,6 +185,19 @@ grep -rn '() => {}' <pkg>/*.mbt                      # Empty callback anti-patte
 - **Orphan rule** (error 4061): can't impl foreign trait for foreign type — use a private newtype wrapper
 - **Error handling:** use `Unit!Error` or `T!Error` for fallible return types. Normal calls auto-propagate errors (zero syntax cost). `try?` converts to `Result[T, E]` (preserves concrete `E`). `abort` is NOT catchable — prefer `fail("msg")` for defect detection (catchable + source location). See `moonbit-error-handling` skill for full conventions (abort vs fail vs raise, boundary rules, error type design).
 - **TODO syntax:** `...` is a placeholder for unimplemented code. It type-checks as any type but aborts at runtime. Do not leave `...` in committed code.
+- **Newtype wrappers (v0.9.2):** Use `struct T(Underlying)` for single-field wrappers. The old `type T Underlying` newtype declaration was removed in v0.9.2.
+- **Local mutual recursion (v0.9.2):** Local `fn name(...)` bindings no longer form a mutually recursive group implicitly (top-level `fn` declarations are unaffected). Use `letrec name = fn(...) { ... } and name2 = fn(...) { ... }`:
+  ```moonbit
+  fn outer() -> Bool {
+    letrec even = fn(n : Int) -> Bool {
+      if n == 0 { true } else { odd(n - 1) }
+    }
+    and odd = fn(n : Int) -> Bool {
+      if n == 0 { false } else { even(n - 1) }
+    }
+    even(4)
+  }
+  ```
 
 ## Testing
 
@@ -193,6 +216,9 @@ grep -rn '() => {}' <pkg>/*.mbt                      # Empty callback anti-patte
 - `loop` keyword is deprecated — use `for .. in`
 - `try?` does not catch `abort`
 - For cross-target builds, use per-file conditional compilation rather than `supported-targets` in moon.pkg.json
+- `derive(Show)` on containers (tuple/array/map/set/Option/Result) is deprecated in v0.9.2 — use `derive(Debug)` for diagnostics and `@debug.assert_eq(...)` for test assertions. `Show::output` is now consistent with `Show::to_string` (both unquoted) for `String`/`Char`
+- Old `type T Underlying` newtype no longer compiles — use `struct T(Underlying)`
+- Local mutually recursive `fn` no longer works — use `letrec`
 
 ## Code Changes & Review
 
@@ -229,6 +255,15 @@ For multi-project workspaces (monorepos with multiple `moon.mod.json`):
 - `moon work init` — Initialize a workspace
 - `moon work use <path>` — Add a project to the workspace
 - `moon work sync` — Sync dependencies across workspace members
+
+### v0.9.2 Toolchain Updates
+
+- **Per-member preferred-target:** Workspace builds (`moon build`, `moon test`) now respect each member's declared `preferred-target`, so mixed frontend/backend projects can build in a single command.
+- **`moon run -c '<script>'`:** Execute a snippet without creating a file. Useful for one-off probes inside a project.
+- **Path-based `moon run`:** `moon run path/to/project` resolves the project from the given path; no longer requires running from the project root or passing `--manifest-path`.
+- **Native LSP:** `moon lsp` ships an OCaml-based LSP binary. Enable in VS Code with `"moonbit.nativeLsp": true`.
+- **`MOON_WORK` env var:** Override the `moon.work` location, or set `MOON_WORK=off` to disable workspace behavior for a single invocation.
+- **Experimental `moon.mod`:** A new configuration file format replacing `moon.mod.json`. Set `NEW_MOON_MOD=1` to migrate automatically. Build rules move from `options("pre-build": ...)` in `moon.pkg` to structured `rule()` / `dev_build()` declarations in `moon.mod`, reusable across packages.
 
 ## Git & PR Workflow
 

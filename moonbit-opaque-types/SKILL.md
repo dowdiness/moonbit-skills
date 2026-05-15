@@ -185,3 +185,16 @@ pub(all) struct Frontier(Array[Int]) derive(Debug, Eq)
 | Type safety | Distinct type prevents mixing with primitives |
 | Trait derivation | `derive(Debug, Eq, ...)` works normally |
 | Power user access | Optional `advanced()` escape hatch |
+
+## Related: `extenum` (the opposite direction)
+
+Opaque types and `extenum` (v0.9.2) sit at opposite ends of the same extension axis:
+
+| | Opaque type | `extenum` |
+|---|---|---|
+| Who controls the shape? | The owning package — internals hidden, no downstream extension | Downstream packages — variants can be added from anywhere |
+| Pattern matching by consumers | Not possible (internals are `priv`) | Required to include a wildcard arm |
+| Invariants | Enforced at construction by the factory | None at the type level — each consumer must handle unknown variants |
+| Typical use | Library facade, domain wrappers, type-safe IDs | Plugin-extensible AST, open event taxonomies |
+
+If you're choosing between these: pick opaque types when you want to *prevent* downstream code from depending on the shape, and `extenum` when you want to *invite* downstream code to add to it. They are not interchangeable — they answer different questions about who owns the type's variation. See `moonbit-expression-problem` for the full `extenum` treatment.

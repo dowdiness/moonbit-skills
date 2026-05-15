@@ -177,6 +177,72 @@ fn optimize[T : ExprSym](e: T) -> T {
 
 **No first-class expression values.** An expression like `example1` is a function `[T : ExprSym]() -> T`, not a storable value. You cannot place it in a data structure or pass it to a function that is not generic.
 
+## Solution 1b: Extensible Enums (`extenum`, v0.9.2)
+
+MoonBit v0.9.2 introduces the `extenum` keyword, which **partially** addresses the data axis directly: an `extenum` declared in package `A` can have new variants added by another package `B` via `+=`, without editing `A`.
+
+```moonbit
+// In package @core
+pub extenum Expr {
+  Lit(Int)
+  Add(Expr, Expr)
+}
+
+// In package @plugin — adds Mul without editing @core.
+// Extension uses the `extenum` keyword on both sides of `+=`.
+extenum @core.Expr += {
+  Mul(@core.Expr, @core.Expr)
+}
+```
+
+Pattern matching on an `extenum` requires a wildcard arm — the compiler cannot prove exhaustiveness when downstream packages may add more variants, and rejects the match as a partial-match error otherwise. Constructors defined in a foreign package are referenced as `@pkg.Constructor`:
+
+```moonbit
+fn eval(e : @core.Expr) -> Int {
+  match e {
+    @core.Lit(n) => n
+    @core.Add(a, b) => eval(a) + eval(b)
+    @plugin.Mul(a, b) => eval(a) * eval(b)
+    _ => abort("unknown Expr variant")   // required fallback
+  }
+}
+```
+
+When matching an extenum defined in the *current* package, constructor names can be used unqualified — but the wildcard arm is still required.
+
+### Scorecard
+
+| Property | Status | Notes |
+|----------|--------|-------|
+| New variants by independent packages | ✓ | `@core.Expr += { ... }` from any downstream package |
+| New operations | Partial | Each operation must include a wildcard arm; new variants from a plugin will hit the wildcard until each operation is updated |
+| Pattern matching on structure | ✓ | Full structural access, with the catch above |
+| Type safety | Partial | Exhaustiveness is enforced *modulo* the mandatory wildcard — silent fallthrough is possible if a consumer forgets to handle a newly-added variant |
+| Separate compilation | ✓ | Plugin packages compile independently |
+
+### When `extenum` Fits
+
+- The set of "core" variants is known and stable, but **plugins genuinely need to add variants** in their own packages.
+- Operations are written in well-known sites that can be updated when new variants appear, OR they have sensible fallback behavior (`abort`, "skip unknown nodes", default rendering, etc.).
+- Pattern-matching ergonomics (`match`, destructuring) matter more than compile-time exhaustiveness.
+
+### When `extenum` Does Not Fit
+
+- You need **statically-verified exhaustiveness** across all current and future variants. The mandatory wildcard arm defeats this — an unhandled variant becomes a runtime concern, not a type error.
+- You need **operation-axis extensibility without coordination**. Each new operation function on `@core.Expr` must still hand-roll arms for every constructor; this is the same enum-axis problem as Solution 2.
+- You want to use type ascription / parametric polymorphism to select among many "interpretations" of the same expression — that is Finally Tagless territory.
+
+### Comparison
+
+| Need | `extenum` | Finally Tagless | Two-Layer |
+|------|-----------|-----------------|-----------|
+| Cross-package variant extension | ✓ | ✓ (new trait) | ✗ (enum is closed in core) |
+| Cross-package operation extension | ✗ (must touch each operation) | ✓ (new struct) | ✓ (new struct, on tagless side) |
+| Compile-time exhaustiveness | Partial (wildcard required) | N/A (no matching) | ✓ (within owning package) |
+| Pattern matching / structural passes | ✓ | ✗ | ✓ (via concrete layer) |
+
+`extenum` is the **closest MoonBit comes to row-polymorphic / open sum types**, but pays for that with mandatory wildcard fallbacks. It complements Finally Tagless rather than replacing it: use `extenum` when you specifically need pattern-matching on plugin-defined variants; use Finally Tagless when you need both axes open without losing exhaustiveness.
+
 ## Solution 2: Enum + Trait (Baseline, One-Axis Only)
 
 For reference, the conventional approach:
@@ -265,7 +331,13 @@ The key insight: *the cost of change is localized.*
 
 **Who is this "local" to?** The localization is honest only from the *library author's* perspective — `ConcreteExpr` and `replay` live in your package, so you can edit them when adding a variant. From a **plugin author's** perspective, Two-Layer does *not* give data-axis extensibility: to ship a new variant with full structural-pass support, the plugin must edit (or coordinate an update to) the core library. And a **consumer** who writes their own `ConcreteExpr`-matching passes still faces exhaustiveness errors on every new variant — just as they would in Solution 2. The benefit of Two-Layer is limited to consumers who stay on the *tagless* API.
 
-If you need both (a) data-axis extensibility by independent plugins and (b) structural observation on plugin-defined variants, no solution in this document fully delivers — you must relax one. Pure Finally Tagless (Solution 1) keeps plugins independent at the cost of structural passes; Two-Layer keeps structural passes at the cost of an open plugin ecosystem.
+If you need both (a) data-axis extensibility by independent plugins and (b) structural observation on plugin-defined variants, three solutions can apply, each relaxing something different:
+
+- **Pure Finally Tagless (Solution 1)** keeps plugins independent and exhaustive at the cost of structural passes.
+- **Two-Layer (this solution)** keeps structural passes and exhaustiveness within the owning package, at the cost of an open plugin ecosystem.
+- **`extenum` (Solution 1b, v0.9.2)** delivers both data-axis extensibility *and* structural matching on plugin-defined variants, at the cost of compile-time exhaustiveness (every match needs a wildcard fallback).
+
+Pick by which guarantee you're least willing to give up. Two-Layer remains the right choice when the variant set is owned by the library, structural passes need exhaustiveness, and plugins are expected to live as new *operations*, not new variants.
 
 ### Scorecard
 
@@ -417,7 +489,7 @@ A complete solution to the Expression Problem requires the ability to **abstract
 2. **Type constructor polymorphism**: abstracting over `F[_]`
 3. **Extensible variants / row polymorphism**: open sum types
 
-MoonBit's Self-based traits without type parameters provide none of these directly. Finally Tagless succeeds because it cleverly avoids needing them: instead of storing "an expression" as a value, it represents expressions as **parametrically polymorphic construction processes**.
+MoonBit's Self-based traits without type parameters provide none of these directly. Finally Tagless succeeds because it cleverly avoids needing them: instead of storing "an expression" as a value, it represents expressions as **parametrically polymorphic construction processes**. As of v0.9.2, `extenum` adds a limited form of extensible variants (#3) — open sum types are now expressible at the language level — but the trade is that pattern matching loses static exhaustiveness against future additions and must default to a wildcard arm.
 
 The price paid is the inability to observe structure. This is a fundamental trade-off:
 
@@ -433,7 +505,11 @@ Is the set of variants fixed?
 ├─ Yes → Use an enum with pattern matching (Solution 2)
 └─ No
    ├─ Do you need structural observation (optimization, transformation)?
-   │  ├─ Yes → Two-Layer Architecture (Solution 3)
+   │  ├─ Yes
+   │  │  ├─ Variants are added by independent plugin packages?
+   │  │  │  └─ Yes → extenum (Solution 1b, v0.9.2) — accept wildcard fallback
+   │  │  └─ Variants are owned by the library?
+   │  │     └─ Yes → Two-Layer Architecture (Solution 3)
    │  └─ No  → Pure Finally Tagless (Solution 1)
    ├─ Do you need runtime-swappable interpretations?
    │  ├─ Yes → Function Records / Object Algebras (Solution 4)

@@ -28,6 +28,11 @@ Reference this skill before writing MoonBit code. Using deprecated syntax causes
 | `derive(Show)` | `derive(Debug)` + manual `impl Show` if needed | `derive(Show)` warns [0027]; `Show` trait itself is NOT deprecated — `inspect()` still requires it. Use `derive(Debug)` for debugging; add manual `impl Show` for `inspect`/`to_string` (v0.9) |
 | `lexmatch`/`lexmatch?` | `s =~ re"..."` regex expressions | Planned removal; use stable regex syntax (v0.9) |
 | `@immut/array` | `@immut/vector` | `immut/vector` replaces `immut/array` with better performance (v0.9) |
+| `type T UnderlyingType` newtype | `struct T(UnderlyingType)` | Old newtype syntax removed in v0.9.2 — use single-field tuple struct |
+| Mutually recursive local `fn` | `letrec` | Mutually recursive local `fn` declarations removed in v0.9.2; use `letrec` for local mutual recursion |
+| Dual-signature struct constructor | `fn Type::Type(params) -> Type { .. }` | The verbose two-declaration form is deprecated in v0.9.2 — define the constructor directly as one method |
+| `Show::to_string` on Option / Result / Array / Map / Set / tuple | `Debug::to_string` (via `derive(Debug)`) + `@debug.assert_eq` | Container `Show` impls being phased out per v0.9.2 release notes. Verified deprecation observed on `Option` in `moonc` 0.1.20260427; broader container deprecations may not have shipped yet — check `moon check` output. `Show::output` is now consistent with `Show::to_string` (both unquoted) for `String`/`Char` |
+| `options("pre-build": ...)` in moon.pkg | `rule()` / `dev_build()` in `moon.mod` | v0.9.2 build rules: structured `rule()` / `dev_build()` declarations are reusable across packages |
 
 ## API Patterns
 
@@ -83,6 +88,57 @@ for x in xs {
 | Iterating over a collection with accumulator | `for x in xs; acc = 0 { ... }` |
 | Index-based iteration with state | C-style `for i = 0, acc = 0; ...` |
 | Simple aggregation, no pattern matching needed | `for x in xs` with `let mut` |
+
+## v0.9.2 Removed Syntax (no longer compiles)
+
+These are **hard removals** — they fail compilation, not just emit warnings:
+
+```moonbit
+// REMOVED — old newtype declaration
+type Frontier Array[Int]
+
+// REPLACEMENT — single-field tuple struct
+struct Frontier(Array[Int]) derive(Show, Eq)
+```
+
+```moonbit
+// DEPRECATED — sibling local `fn`s no longer form a mutually recursive group
+fn outer() -> Bool {
+  fn even(n : Int) -> Bool {
+    if n == 0 { true } else { odd(n - 1) }
+  }
+  fn odd(n : Int) -> Bool {
+    if n == 0 { false } else { even(n - 1) }
+  }
+  even(4)
+}
+
+// REPLACEMENT — `letrec name = fn(...) { ... } and name2 = fn(...) { ... }`
+fn outer() -> Bool {
+  letrec even = fn(n : Int) -> Bool {
+    if n == 0 { true } else { odd(n - 1) }
+  }
+  and odd = fn(n : Int) -> Bool {
+    if n == 0 { false } else { even(n - 1) }
+  }
+  even(4)
+}
+```
+
+The compiler emits warning [0027] on the old form with the exact migration hint: *"Use `letrec f = fn(a, b) { ... } and g = fn(...) { ... }` instead."* Both forms verified against `moonc` 0.1.20260427.
+
+## v0.9.2 Struct Constructor (deprecated dual-signature form)
+
+v0.9.2 simplifies struct constructor declarations: define the constructor directly as `fn Type::Type(params) -> Type { .. }` without the verbose dual-signature boilerplate. The old form still compiles but emits deprecation warnings.
+
+```moonbit
+// PREFERRED — define the constructor directly as one method
+fn MyStruct::MyStruct(x : Int, y : Int) -> MyStruct {
+  { x, y }
+}
+```
+
+This is the documented default in `moonbit-base.md` and `moonbit-opaque-types`. If you encounter the older form in existing code and see a deprecation warning, replace it with the direct `fn Type::Type(...) { ... }` declaration.
 
 ## How This Skill Is Maintained
 
