@@ -2,10 +2,11 @@
 name: moonbit-refactoring-safety
 description: >
   Execution discipline for boundary-crossing MoonBit refactors:
-  splitting packages, extracting modules into a facade-and-internals
-  layout, splitting files safely, and pinning invariants with property
-  tests before structural change. Use when the task is "split this
-  package", "extract these files", "verify the public API didn't
+  splitting packages with language-enforced isolation via `internal/`,
+  extracting modules behind a `pub using` facade, splitting files
+  safely, and pinning invariants with property tests before structural
+  change. Use when the task is "split this package", "extract these
+  files into an internal package", "verify the public API didn't
   change", or "set up tests before refactoring". Pairs with
   `moonbit-refactoring`, which covers *what* to refactor toward.
 ---
@@ -18,17 +19,17 @@ Pairs with `moonbit-refactoring` — that skill covers *what* to refactor toward
 
 ## Relationship to `moonbit-refactoring`'s package-split section
 
-Upstream `moonbit-refactoring` documents a different package-split flow: put `using @A { ... }` in the new package `B` and migrate consumers' references from A's names to B's names. That flow fits the scenario where `B` is a shared-utilities package and consumers should depend directly on it.
+Upstream `moonbit-refactoring` mentions `internal/` packages as a convention to "consider", and documents a different lightweight package-split flow (using `@A { ... }` in the new package, migrate consumers to it, drop the using). That flow fits the renaming case — when consumers *should* eventually depend on the new package directly.
 
-This skill documents the **facade-and-internals** scenario: `A` is the existing package, internals get extracted into a new `B`, `A` becomes a thin facade that re-exports `B`'s public surface via `pub using`. Consumers of `A` see no change at the call site. This fits the much more common case where `A`'s name and import path must stay stable.
+This skill leads with the **facade + `internal/` extraction** scenario: `A` stays as the public package, internals move into `A/internal/<name>/`, `A` re-exports through `pub using`. MoonBit enforces `internal/` visibility at the language level — downstream modules cannot import `*/internal/*` packages no matter what, so the facade can't be bypassed. Consumers of `A` see no change at the call site, and the boundary is permanent rather than transitional.
 
-If you're doing a facade extraction, this skill supersedes the upstream procedure. If you're consolidating into a fresh utilities package, the upstream procedure is lighter and sufficient.
+If you're hiding internals behind a permanent facade, this skill supersedes the upstream procedure. If you're staging a rename so consumers eventually migrate to the new package, see the "visible-extraction split" variant at the end of section 3 (or upstream's procedure, which fits the same case).
 
 ## When to invoke
 
-- "Split this package into A and B" (facade + internals shape).
-- "Extract these files into a new module."
-- "Move this code into an `internal/` package without breaking consumers."
+- "Split this package — hide the implementation but keep the public API stable."
+- "Extract these files into an `internal/` package."
+- "Move this code so downstream can't depend on it directly."
 - "Set up a safety net before I refactor this."
 - "I refactored X; how do I verify the public API didn't change?"
 
@@ -90,26 +91,37 @@ moon check
 
 ## 3. Facade + Internals Package Split: Six Steps
 
-Splitting package `A` (the existing public package) by extracting its internals into a new package `B`. `A` becomes a thin facade re-exporting `B`'s public surface, so existing consumers continue compiling unchanged. Each step exposes one specific failure mode.
+Splitting package `A` (the existing public package) by extracting its internals into a new package located under `A/internal/`. `A` becomes a thin facade re-exporting the internal package's public surface, so existing consumers continue compiling unchanged — **and**, because MoonBit enforces `internal/` visibility at the language level, downstream consumers cannot bypass the facade by importing the internals directly. Each step exposes one specific failure mode.
 
-### Step 1 — Create `B`, move source files
+> **The `internal/` rule is language-enforced.** Any package whose path contains a segment named `internal` (e.g. `dowdiness/myproj/internal/store`) can only be imported by packages within the *same module*. An external module attempting `import { "dowdiness/myproj/internal/store" }` is rejected by `moon` at the build-plan phase, before `moonc` even runs, with:
+>
+> ```
+> Cannot import internal package dowdiness/myproj/internal/store@0.1.0
+>   in dowdiness/other-module@0.1.0 due to internal visibility rules
+> ```
+>
+> This is the load-bearing reason to put extracted internals under `internal/` rather than alongside the facade as a sibling package. The compiler — not your code review discipline — guarantees the facade can't be bypassed.
 
-Create a new directory `B/` with an empty package manifest (either `moon.pkg` or `moon.pkg.json` — both are valid; `moon new` generates the `.json` form, but a literally-empty `moon.pkg` is enough to declare the package). Move the relevant source files there. Do not yet touch `A`'s manifest.
+### Step 1 — Create `A/internal/<name>`, move source files
+
+Create the directory `A/internal/<name>/` (pick a descriptive `<name>` for the extracted package, e.g. `internal/store`). Add an empty package manifest — either `moon.pkg` or `moon.pkg.json` is valid; `moon new` generates the `.json` form, but a literally-empty `moon.pkg` is enough to declare the package. Move the relevant source files into the new directory. Do not yet touch `A`'s manifest.
+
+(If your goal is a *renaming-style* split where consumers should eventually depend on the new package directly, put it at a sibling path like `dowdiness/myproj/B` instead of under `internal/`. The procedure below is otherwise identical; the only behavioral difference is that consumers can migrate to `@B.X` over time. See "Variant: visible-extraction split" at the end of this section.)
 
 ### Step 2 — Re-export via `pub using` in the facade
 
-In `A`'s `moon.pkg`, add `B` as a dependency. Then in an `.mbt` file inside `A`, re-export `B`'s public surface:
+In `A`'s `moon.pkg`, add the internal package as a dependency. Then in an `.mbt` file inside `A`, re-export the internal package's public surface:
 
 ```mbt
 // In package A — backward-compatible re-export
-pub using @B {
+pub using @internal_store {
   type MyType,       // structs, enums (methods/associated fns/constructors come along)
   trait MyTrait,     // traits
   my_function,       // functions and constants
 }
 ```
 
-`pub using` does two things at once: re-exports to consumers of `A`, **and** makes the names available locally inside `A` without the `@B.` prefix. Code remaining in `A` keeps compiling unchanged. Run `moon check` after this step.
+`pub using` does two things at once: re-exports to consumers of `A`, **and** makes the names available locally inside `A` without the `@internal_store.` prefix. Code remaining in `A` keeps compiling unchanged. Run `moon check` after this step.
 
 **What re-exports automatically** (verified with `moon check` and `moon info`). Listing `type Foo` re-exports the type *and* all of its methods, associated functions, and custom constructor. From a consumer's perspective:
 
@@ -120,15 +132,15 @@ s.method()                         // method through facade
 
 both work without listing `MyType::method` or `MyType::MyType` separately. Methods don't need to be listed individually — listing the type pulls them along. Functions, constants, and traits must be listed by name.
 
-**`pub using` forwards names, not permissions.** A `pub struct S` is read-only to external code (fields readable, but external code cannot construct `S::{...}` or write `mut` fields). Re-exporting does not change that — consumers of `@A` see the same visibility they would see importing directly from `@B`. If external construction or field mutation is required, declare the origin as `pub(all) struct S`, or expose a constructor / mutator method.
+**`pub using` forwards names, not permissions.** A `pub struct S` is read-only to external code (fields readable, but external code cannot construct `S::{...}` or write `mut` fields). Re-exporting does not change that — consumers of `@A` see the same visibility they would see importing directly from the internal package. If external construction or field mutation is required, declare the origin as `pub(all) struct S`, or expose a constructor / mutator method.
 
 ### Step 3 — Expect private-symbol errors
 
-After steps 1 and 2, `moon check` will report errors at every private function inside `B` that used to live next to its caller (which is now in `A`). The error reads as **"Value X not found in package B"** — the compiler treats private symbols as if they don't exist from outside, rather than emitting a separate "private" diagnostic. **This is the point** — the split reveals hidden coupling that was invisible while everything was in one package.
+After steps 1 and 2, `moon check` will report errors at every private function inside the internal package that used to live next to its caller (which is now in `A`). The error reads as **"Value X not found in package <internal-name>"** — the compiler treats private symbols as if they don't exist from outside, rather than emitting a separate "private" diagnostic. **This is the point** — the split reveals hidden coupling that was invisible while everything was in one package.
 
-Fix by making necessary functions `pub` in `B`. If consumers of `A` need them too, add them to the `pub using` list. If only `A` itself needs them (after the split), `pub` is enough.
+Fix by making necessary functions `pub` in the internal package. `A` can then use them through `pub using` or directly via the `@internal_store.` prefix. There's no risk of leaking these `pub`s to downstream — the `internal/` rule keeps them inside the module.
 
-**Note on direction:** errors flow `A → B` (caller now in `A`, callee private in `B`). The reverse direction (`B` calling something private in `A`) cannot occur — that would require `B` to import `A`, but `A` already imports `B`, and the compiler hard-rejects the cycle with **"Import loop detected"**. Internals never depend on facade.
+**Note on direction:** errors flow `A → internal` (caller now in `A`, callee private in the internal package). The reverse direction (internal package calling something private in `A`) cannot occur — that would require the internal package to import `A`, but `A` already imports it, and the compiler hard-rejects the cycle with **"Import loop detected"**. Internals never depend on facade.
 
 **Don't preempt step 3.** Resist the urge to `pub` everything in step 1. The errors are the inventory of what actually needs to cross the boundary — usually a smaller set than you'd guess.
 
@@ -136,32 +148,47 @@ Fix by making necessary functions `pub` in `B`. If consumers of `A` need them to
 
 Run `moon info` and inspect `git diff A/pkg.generated.mbti`. The interface file is the source of truth for what consumers of `A` see.
 
-Verified `.mbti` shape after re-exporting `type Store, put` from `@B`:
+Verified `.mbti` shape after re-exporting `type Store, put` from `@internal_store`:
 
 ```
 // A/pkg.generated.mbti (excerpt)
-import { "B" }
+import { "internal/store" }
 
 // Values
-pub fn put(@B.Store, String, Int) -> Unit      // function: inlined with origin types
+pub fn put(@store.Store, String, Int) -> Unit   // function: inlined with origin types
 
 // Type aliases
-pub using @B {type Store}                       // type: under "Type aliases" section
+pub using @store {type Store}                    // type: under "Type aliases" section
 ```
 
-Functions get inlined as ordinary forwarded signatures whose parameter and return types reference the canonical origin (`@B.Store`). Types land in the `Type aliases` section of the `.mbti` as `pub using @origin {type Name}` lines. Consumer code written against `@A.Store` / `@A.put` still compiles unchanged.
+Functions get inlined as ordinary forwarded signatures whose parameter and return types reference the canonical origin. Types land in the `Type aliases` section of the `.mbti` as `pub using @origin {type Name}` lines. Consumer code written against `@A.Store` / `@A.put` still compiles unchanged.
 
 If the `.mbti` diff shows any change you didn't intend (a removed symbol, a changed signature, an unexpected origin path), the split has leaked. Stop and fix before continuing.
 
-### Step 5 — Migrate consumers incrementally
+### Step 5 — Verify external isolation
 
-Once `.mbti` is stable, the split is invisible to consumers. They can switch from `@A.MyType` to `@B.MyType` at their own pace; the facade keeps working until they do.
+A defining feature of the `internal/` split: downstream code cannot reach the internal package even if it tries. Verify with a quick smoke test from a consumer module:
 
-`moon ide find-references <symbol>` enumerates call sites for the migration. Once all consumers of a symbol have migrated, remove the corresponding entry from `A`'s `pub using` block.
+```moonbit
+// In a downstream module
+import { "dowdiness/myproj/internal/store" @store }
+// Build fails: "Cannot import internal package ... due to internal visibility rules"
+```
 
-### Step 6 — Audit and remove newly-unused `pub` APIs
+If this *succeeds*, something is wrong — check the path actually contains a literal `internal` segment, and that the consumer is in a different module (not just a different package within the same module).
 
-After consumer migration completes, walk both packages with `moon ide analyze` and remove any `pub` that was added defensively but ended up unused. The post-split surface area should be smaller than pre-split, not larger.
+### Step 6 — Audit and trim the facade
+
+Walk the facade with `moon ide analyze` and remove any `pub using` entry that ended up unused, plus any `pub` in the internal package that no longer has a caller in `A`. Unlike a visible-extraction split, you don't expect consumers to migrate away from `@A.X` — the `internal/` boundary is permanent — so the facade's `pub using` block is the long-term API surface, not a transitional shim.
+
+### Variant: visible-extraction split (for renaming/restructuring)
+
+If the goal isn't to *hide* the internals but to *rename* the package so consumers eventually depend on the new path directly, drop the `internal/` segment and put the extracted package at a sibling path (e.g. `dowdiness/myproj/B`). The first four steps are identical. Steps 5 and 6 change:
+
+- **Step 5':** Migrate consumers incrementally with `moon ide find-references <symbol>`. The facade's `pub using` is a transitional shim — consumers can switch from `@A.MyType` to `@B.MyType` at their own pace.
+- **Step 6':** Once all known consumers have migrated, remove the corresponding entries from `A`'s `pub using` block. Eventually the facade may disappear entirely.
+
+This variant loses the language-enforced isolation in exchange for migration flexibility. Use it only when consumers *should* eventually depend on `B` directly.
 
 ## Commands quick reference
 
