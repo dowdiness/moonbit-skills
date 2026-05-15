@@ -48,7 +48,13 @@ link_skills() {
     link_skill "$dir" "$skills_dir"
   done
 
+  # Skills vendored from the moonbit-agent-guide submodule. The top-level
+  # copies of these directories were removed; install directly from the
+  # submodule so we don't carry stale duplicates. Local-only extensions
+  # to these skills live in patches/ — see patches/README.md.
   link_skill "$REPO_DIR/moonbit-agent-guide/moonbit-agent-guide" "$skills_dir" "moonbit-agent-guide"
+  link_skill "$REPO_DIR/moonbit-agent-guide/moonbit-c-binding" "$skills_dir" "moonbit-c-binding"
+  link_skill "$REPO_DIR/moonbit-agent-guide/moonbit-refactoring" "$skills_dir" "moonbit-refactoring"
 }
 
 link_base() {
