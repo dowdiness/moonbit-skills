@@ -13,13 +13,16 @@ the submodule's versions directly, the local-only content was preserved here.
 
 ## Patch Contents — `moonbit-refactoring-extensions.diff`
 
-Adds the following sections to upstream's `moonbit-refactoring/SKILL.md`:
+Adds the following sections to upstream's `moonbit-refactoring/SKILL.md`. Most have been **promoted to the standalone `moonbit-refactoring-safety` skill** and no longer need to live as a patch — see the status column.
 
-- **Workflow step 3 — Safety net**: write property tests with `@qc.quick_check_fn` before structural changes.
-- **Splitting Files — Delete-first technique**: delete the original after extracting, let `moon check` report missing definitions.
-- **Splitting Packages — expanded walkthrough**: `pub using` re-export mechanics, `.mbti` stability checks, what re-exports automatically, visibility forwarding semantics.
-- **Prefer List Comprehensions for Build-and-Return Loops (v0.9.2)**: replacing `Array::new` + `push` patterns with `[ for x in xs => f(x) ]`, including the filter form and the "when to keep the explicit loop" caveat.
-- **Deprecated Syntax Quick Reference table**: extra rows beyond upstream's coverage, including v0.9.2 entries.
+| Section | Status |
+|---------|--------|
+| Workflow step 3 — Safety net (property tests with `@qc.quick_check_fn`) | Promoted to `moonbit-refactoring-safety` |
+| Splitting Files — Delete-first technique | Promoted to `moonbit-refactoring-safety` |
+| Splitting Packages — expanded walkthrough (`pub using` mechanics, `.mbti` audit, visibility forwarding semantics) | Promoted to `moonbit-refactoring-safety` |
+| Prefer List Comprehensions for Build-and-Return Loops (v0.9.2) | Lives in `moonbit-base.md`; candidate for upstream PR |
+| Deprecated Syntax Quick Reference rows (v0.9.2 entries, etc.) | Canonical in `moonbit-deprecated-syntax`; not for upstream |
+| Misc. stylistic polish (visibility-transfer note for `#as_free_fn`, `..` vs `..rest` semantics, pattern-matching micro-tips) | Candidates for upstream PR; minor enough to drop if the patch becomes inconvenient |
 
 ## Usage
 

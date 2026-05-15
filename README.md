@@ -15,7 +15,8 @@ Some skills originate from the [official `moonbit-agent-guide`](https://github.c
 | `moonbit-housekeeping` | community | Repo maintenance with generic worker profiles for phased checks (git, lint, sync, build, test). |
 | `moonbit-opaque-types` | community | Opaque/newtype pattern for user-friendly public APIs. Type-safe wrappers and facade layers. |
 | `moonbit-perf-investigation` | community | **Prerequisite for any optimization.** Reproducing bottlenecks in microbenchmarks before designing solutions. |
-| `moonbit-refactoring` | [official](https://github.com/moonbitlang/moonbit-agent-guide) (submodule) + local patch | Idiomatic MoonBit refactoring: shrink public APIs, pattern matching, methods, loop invariants. Local extensions in `patches/moonbit-refactoring-extensions.diff`. |
+| `moonbit-refactoring` | [official](https://github.com/moonbitlang/moonbit-agent-guide) (submodule) | Idiomatic MoonBit refactoring: shrink public APIs, pattern matching, methods, loop invariants. |
+| `moonbit-refactoring-safety` | community | Mechanical disciplines for boundary-crossing refactors: pre-refactor property tests, delete-first file splits, six-step package split procedure with `.mbti` audit. Complement to `moonbit-refactoring`. |
 | `moonbit-agent-setup` | community | Bootstrap MoonBit project instructions and agent-specific adapters for Codex, Claude Code, or generic coding agents. |
 | `moonbit-traits` | community | Effective trait usage in MoonBit's Self-based trait system. Endomorphisms, capabilities, visitors. |
 | `moonbit-verification` | community | Quality checklist: dependencies, syntax, tests, interfaces, formatting. |
