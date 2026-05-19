@@ -25,7 +25,7 @@
 
 ## MoonBit Code Search
 
-Prefer `moon ide` over grep/glob for MoonBit-specific code search. These commands use the compiler's semantic understanding, not text matching.
+Prefer `moon ide` over grep/glob for MoonBit-specific code search. These commands use compiler semantics instead of text matching.
 
 ```bash
 moon ide peek-def SyncEditor              # Go-to-definition with context
@@ -35,7 +35,14 @@ moon ide outline editor/                  # Package structure overview
 moon ide doc "String::*rev*"              # API discovery with wildcards
 ```
 
-Symbol syntax: `Symbol`, `@pkg.Symbol`, `Type::method`, `@pkg.Type::method`
+Common symbol forms:
+
+```text
+Symbol
+@pkg.Symbol
+Type::method
+@pkg.Type::method
+```
 
 When to use: finding definitions, tracing usages, understanding package APIs, discovering methods. Falls back to grep only for non-MoonBit files or cross-language patterns.
 
@@ -59,7 +66,7 @@ grep -rn '() => {}' <pkg>/*.mbt                      # Empty callback anti-patte
 
 ## Bindings & Visibility
 
-- **`const`** for top-level compile-time constants — **top-level only, cannot appear inside functions** (unlike JavaScript/TypeScript). When defining a fixed value at module scope (magic numbers, sizes, thresholds, string keys), always use `const`, not `let`.
+- **`const`** for top-level compile-time constants. It is valid only at top level; functions use `let` for immutable local bindings. For a fixed value at module scope (magic numbers, sizes, thresholds, string keys), always use `const`.
   ```moonbit
   const MAX_SIZE = 1024      // correct — top-level fixed value → const
   const PREFIX = "incr"      // correct — top-level fixed string → const
@@ -90,7 +97,16 @@ grep -rn '() => {}' <pkg>/*.mbt                      # Empty callback anti-patte
   // Consumers of this package see AudioBuffer as if defined here.
   // Code within this package can use AudioBuffer without @dsp. prefix.
   ```
-  **What works through `pub using`:** function calls, type annotations, method calls on re-exported types, trait bounds, enum pattern matching via `Type::Constructor`. **What doesn't:** bare enum constructors via `@pkg.Constructor` (use `using @pkg { type T }` + `T::Constructor(args)` instead — this is standard MoonBit, not a `pub using` limitation). The `.mbti` interface shows re-exported types with their canonical origin (e.g., `@dsp.AudioBuffer`), but consumer code using the facade path still compiles.
+  **What works through `pub using`:** function calls, type annotations, method calls on re-exported types, trait bounds, enum pattern matching via `Type::Constructor`.
+
+  **Enum constructor caveat:** bare enum constructors via `@pkg.Constructor` need a normal `using` import and type-qualified constructor form:
+
+  ```moonbit
+  using @pkg { type T }
+  T::Constructor(args)
+  ```
+
+  This is standard MoonBit, not a `pub using` limitation. The `.mbti` interface shows re-exported types with their canonical origin (e.g., `@dsp.AudioBuffer`), but consumer code using the facade path still compiles.
 - **Naming:** `snake_case` for functions, methods, variables, and modules. `PascalCase` for types, enums, and constructors. `SCREAMING_SNAKE_CASE` for `const` constants.
 
 ## Control Flow
@@ -212,7 +228,7 @@ grep -rn '() => {}' <pkg>/*.mbt                      # Empty callback anti-patte
 
 - `._` syntax is deprecated — use `.0` for tuple access
 - `ref` is a reserved keyword — do not use as variable/field names
-- `() => {}` is a map literal, not an empty function body — use `() => ()`
+- `() => {}` is a map literal rather than an empty function body; use `() => ()`
 - `loop` keyword is deprecated — use `for .. in`
 - `try?` does not catch `abort`
 - For cross-target builds, use per-file conditional compilation rather than `supported-targets` in moon.pkg.json
@@ -270,5 +286,5 @@ For multi-project workspaces (monorepos with multiple `moon.mod.json`):
 - Always check if git is initialized before running git commands
 - After rebase operations, verify files are in the correct directories
 - When asked to 'commit remaining files', interpret generously even if phrasing is unclear
-- When merging PRs, always verify CI status is actually passing (not skipped) before proceeding. Never represent CI as green if any checks were skipped or failed.
+- When merging PRs, always verify CI status is passing rather than skipped before proceeding. Never represent CI as green if any checks were skipped or failed.
 - After rebasing or refactoring, verify file paths haven't shifted unexpectedly. Run `git diff --stat` to confirm only intended files changed.

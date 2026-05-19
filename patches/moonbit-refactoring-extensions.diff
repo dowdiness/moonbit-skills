@@ -9,7 +9,7 @@
 -5. **Update docs/tests** in the same patch.
 -6. **Run `moon check`, then `moon test`**.
 -7. **Use coverage** to target missing branches.
-+3. **Safety net**: Before structural changes, write property tests that capture the invariants you need to preserve. Use `@qc.quick_check_fn` with generators that produce valid inputs. Generators must `unwrap()` on failure — never `None => true`.
++3. **Safety net**: Before structural changes, write property tests that capture the invariants you need to preserve. Use `@quickcheck.samples` with generators that produce valid inputs. Generators must `unwrap()` on failure — never `None => true`.
 +4. **Pick one refactor theme** (API minimization, package splits, pattern matching, loop style).
 +5. **Apply the smallest safe change**.
 +6. **Update docs/tests** in the same patch.
@@ -45,11 +45,11 @@
 -   Ensure `moon check` passes before proceeding.
 +   `pub using` both re-exports to consumers AND makes names available locally in `A` — so code remaining in `A` can use `MyType` without the `@B.` prefix. Run `moon check` after this step.
 +
-+   **What re-exports automatically.** Listing `type Foo` re-exports the type *and* all of its methods, associated functions, and custom constructor — `Foo(...)`, `x.method()` all resolve through `@A.Foo` unchanged. Do not list methods individually. Functions, constants, and traits must be listed by name. Trailing commas are allowed.
++   **What re-exports automatically.** Listing `type Foo` re-exports the type *and* all of its methods, associated functions, and custom constructor — `Foo(...)`, `x.method()` all resolve through `@A.Foo` unchanged. Do not list methods individually. Functions, constants, and traits must be listed by name.
 +
 +   **`pub using` forwards names, not permissions.** A `pub struct S` is read-only to external code (fields readable, but external code cannot construct `S::{...}` or write `mut` fields). Re-exporting does not change that — consumers of `@A` see the same visibility they would see importing directly from `@B`. If external construction or field mutation is required, declare the origin as `pub(all) struct S`, or expose a constructor / mutator method. Field-level `pub` modifiers are redundant in a `pub struct` (warning 0008) — the whole-struct modifier controls visibility.
 +
-+3. **Expect private-symbol errors.** Private functions in `A` that were used by code now in `B` (or vice versa) will cause compilation errors. This is the point — the split reveals hidden coupling. Fix by making necessary functions `pub` in the package that owns them, and add them to the re-export list if consumers need them.
++3. **Expect private-symbol errors.** Private functions in `A` that were used by code now in `B` (or vice versa) will cause compilation errors. The split exposes hidden coupling. Fix by making necessary functions `pub` in the package that owns them, and add them to the re-export list if consumers need them.
  
 -2. Find and update all call sites:
 -   ```bash

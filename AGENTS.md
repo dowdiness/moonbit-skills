@@ -1,11 +1,11 @@
-# Project Instructions
+# Project instructions
 
 @/home/antisatori/.codex/RTK.md
 @~/.agents/moonbit-base.md
 
-## Project Context
+## Project context
 
-This repository packages MoonBit development skills for coding agents. It is not itself a MoonBit module: there is no root `moon.mod.json`, `moon.pkg`, or MoonBit test target.
+This repository packages MoonBit development skills for coding agents. It is not itself a MoonBit module because it has no root `moon.mod.json`, `moon.pkg`, or MoonBit test target.
 
 ## Commands
 
@@ -30,7 +30,7 @@ Each skill's `SKILL.md` is the source of truth for trigger rules and workflow. R
 
 `moonbit-base.md` contains shared MoonBit conventions and is linked into `~/.agents/` by `install.sh`.
 
-## Project-Specific Notes
+## Project-specific notes
 
 - `install.sh` links top-level directories containing `SKILL.md` into `~/.agents/skills` and `~/.claude/skills`.
 - `install.sh` also installs three skills directly from the `moonbit-agent-guide/` submodule: `moonbit-agent-guide`, `moonbit-c-binding`, and `moonbit-refactoring`. Top-level copies of these were removed to eliminate drift between vendored and upstream versions.
@@ -38,4 +38,4 @@ Each skill's `SKILL.md` is the source of truth for trigger rules and workflow. R
 - Local-only extensions to vendored skills live in `patches/` as unified diffs against the submodule. See `patches/README.md`. Do not re-create top-level copies of vendored skills to apply changes; either reapply the patch over the submodule, or open an upstream PR.
 - `uninstall.sh` removes symlinks that point back to this repository, including old compatibility links under `~/.codex/skills`.
 - For Codex-only setup, do not create `.claude/` hooks or edit `.codex/config.toml` unless explicitly requested.
-- Keep skill files concise. Put durable language-level MoonBit conventions in `moonbit-base.md`, not repeated in every skill.
+- Keep skill files concise. Store durable language-level MoonBit conventions in `moonbit-base.md` instead of repeating them in every skill.

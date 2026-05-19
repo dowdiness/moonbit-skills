@@ -47,7 +47,7 @@ Restart Claude Code or Codex after installing so the tools discover newly linked
 
 Only removes symlinks pointing to this repository from the Claude Code and Codex locations, including old compatibility symlinks in `~/.codex/skills/`. Other skills are not affected.
 
-## Adding a New Skill
+## Adding a new skill
 
 1. Create a new directory at the repository root (e.g., `moonbit-my-skill/`)
 2. Add a `SKILL.md` file inside it with YAML frontmatter (`name`, `description`) followed by the skill content

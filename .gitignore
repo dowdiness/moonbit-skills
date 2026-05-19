@@ -1,1 +1,12 @@
 .DS_Store
+
+# Local agent/tooling outputs
+.agents/
+.claude/
+.codex/
+.slopless/
+
+# Slopless/npm scratch install used for prose checks
+node_modules/
+package-lock.json
+package.json
