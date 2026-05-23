@@ -121,10 +121,11 @@ grep -rn '() => {}' <pkg>/*.mbt                      # Empty callback anti-patte
   ```
   **`guard`** filters out the bad case so the rest of the function stays flat. Prefer `guard` over `if ... { return }` or nested `match` when only one branch exits early.
   ```moonbit
-  guard let Some(x) = opt else { return Err("missing") }
+  guard opt is Some(x) else { return Err("missing") }
   guard n > 0 else { fail("n must be positive") }
   // happy path continues here — no nesting
   ```
+  Note: `guard let Pattern = expr else { ... }` does NOT compile in current MoonBit — it parses as a Unit statement and the binder doesn't escape. Use the `<expr> is <Pattern>` form above.
 - **Iteration:** `for .. in` with accumulator state. `loop` keyword is deprecated.
   ```moonbit
   // Preferred: for-in with accumulator
