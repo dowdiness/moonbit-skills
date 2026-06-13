@@ -13,7 +13,7 @@
 | Struct construction        | custom `fn Type::Type(...)` constructor | bare `{ field: value }`       |
 | Empty callback body        | `() => ()`                          | `() => {}` (map literal!)     |
 | Tuple field access         | `.0`                                | `._` (deprecated)             |
-| Fallible return type       | `T!Error` with `!` propagation      | `try?` (won't catch abort)    |
+| Fallible return type       | `T!Error` with `!` propagation      | `try?` (deprecated v0.10.0)    |
 | Iteration                  | `for .. in`                         | `loop` (deprecated)           |
 | Visibility default         | `pub`                               | `pub(all)` unless needed      |
 | Re-export from dependency    | `pub using @pkg { type T }`       | manual wrapper functions      |
@@ -63,6 +63,53 @@ moon ide doc --dump /tmp/symbols.jsonl                # Full symbol dump (NEVER 
 grep -rn 'if .* { return' <pkg>/*.mbt                # guard candidates (early return)
 grep -rn '() => {}' <pkg>/*.mbt                      # Empty callback anti-pattern
 ```
+
+## Prefer the Core Library
+
+Before hand-writing a loop, helper, or data structure, search
+[`moonbitlang/core`](https://github.com/moonbitlang/core) and prefer an existing
+core API. Most "I'll just write a quick…" utilities already exist there, are
+tested, and compose with `Iter`/views. This extends the "search before you
+write" discipline above from your own project to the standard library.
+
+**Discover first:** `moon ide doc "<keyword>"`, `moon ide doc "Type::*method*"`,
+then reach for the right package:
+
+| Need | Core package(s) |
+|------|-----------------|
+| Growable/fixed sequence: sort, dedup, fold, `makei` | `array` (+ `ArrayView`) |
+| Lazy pipelines: map/filter/fold/collect/take | `Iter`, `Iter2` (prelude) |
+| Immutable linked list, cons / pattern match | `list` |
+| Persistent (immutable) collections | `immut/*` |
+| FIFO / double-ended / priority queue | `queue`, `deque`, `priority_queue` |
+| Hash map / set | `hashmap`, `hashset` |
+| Ordered (sorted) map / set | `sorted_map`, `sorted_set`, `set` |
+| String ops, views, pattern match | `string` (+ `StringView`), `char` |
+| Bytes / byte buffers / builders | `bytes` (+ `BytesView`), `byte`, `buffer` |
+| UTF-8 / UTF-16 encode-decode | `encoding` |
+| Parse / format numbers | `strconv` |
+| Integer widths / wrapping | `int`, `int64`, `uint`, `uint64`, `int16`, `uint16` |
+| Float / double / general math | `float`, `double`, `math` |
+| Arbitrary precision | `bigint` |
+| min / max / compare | `cmp` (`minimum`, `maximum`), `Int::min`/`max` |
+| Optionals, results, mutable cell | `option`, `result`, `ref` |
+| JSON encode / decode | `json` |
+| Ranges, lazy values | `range`, `lazy`, `lazy_list` |
+| Randomness | `random` |
+| Tests / properties / benchmarks | `test`, `quickcheck` (`@qc`), `bench`, `debug` |
+| CLI args / environment | `argparse`, `env` |
+
+Rules of thumb:
+- A `let mut acc` + push/accumulate loop almost always has a core equivalent
+  (`fold`, `map`, `filter`, `sum`, `collect`, `Array::makei`). See Control Flow —
+  the for-in + mut accumulator is banned precisely because core covers it.
+- Need a min/max? `@cmp.minimum`/`maximum` or `Int::min`/`max`, not a hand `if`.
+- Building a string? `@buffer.Buffer`, not `+=` concatenation in a loop.
+- Don't define a new `Range`, `Option`-like, or container type — core (or the
+  project's `@core`) already has it. Reuse beats reinvention (orphan-rule pain,
+  duplicated bugs, drift).
+- When a core API is `#deprecated`, the warning names the replacement (e.g.
+  `@hashmap.HashMap::new()` → `@hashmap.HashMap([])`); follow it.
 
 ## Bindings & Visibility
 
@@ -133,9 +180,18 @@ grep -rn '() => {}' <pkg>/*.mbt                      # Empty callback anti-patte
     continue sum + x
   } nobreak { sum }
 
-  // Also fine: for-in with mut for simple cases
-  let mut acc = 0
-  for i in 0..<n { acc += xs[i] }
+  // Banned: `let mut` accumulator mutated inside `for .. in`, even for a
+  // "simple" case. Use the functional-state loop above, or an Iter/Array
+  // method (fold/sum/map), UNLESS mutation is genuinely necessary (builder,
+  // true state machine, consumption marker, interop/DOM, measured hot path).
+  let acc = xs.fold(init=0, (a, x) => a + x)
+  //! let mut acc = 0                      // wrong — for-in + mut accumulator
+  //! for i in 0..<n { acc += xs[i] }
+  ```
+- **Destructuring tuple-element arrays:** `for (a, b) in xs` is a parse error `[3002]` — `for .. in` binds identifiers, not patterns. For an `Array[(A, B)]`, both `for a, b in xs` and `xs.iter2()` yield **(index, element)** (`a : Int`, `b : (A, B)` — `Array::iter2() -> Iter2[Int, A]`), NOT the tuple components. To destructure the components, wrap the iterator in `Iter2` (a newtype over `Iter[(X, Y)]`, in prelude) — its two-binder `for` / `.each` yield `(X, Y)`. Otherwise destructure in the body. Tuple-pattern lambda params (`.each(((a, b)) => ...)`) are also a parse error.
+  ```moonbit
+  for a, b in Iter2(xs.iter()) { ... }       // a : A, b : B
+  for p in xs { let (a, b) = p; ... }         // body destructure
   ```
 - **List comprehensions (v0.9.2):** `[ for x in xs => f(x) ]` builds an array; add `if cond` before `=>` to filter. The same `[ for ... => ... ]` shape constructs `Array`, `String`, `Bytes`, or lazy `Iter` based on the target type. Control-flow constructs (`break`, `continue`, etc.) are not currently allowed inside the body.
   ```moonbit
@@ -198,9 +254,14 @@ grep -rn '() => {}' <pkg>/*.mbt                      # Empty callback anti-patte
 
   let r : Ref[Int] = Ref(42)
   ```
+  **Cross-package / blackbox caveat:** the bare `Type(args)` sugar resolves only within the defining package. From another package (notably blackbox `*_test.mbt`, which is a separate package), it is unbound `[4021]` — qualify as `Type::Type(args)` (or `@pkg.Type::Type(args)`). Same constraint the enum-constructor bullet notes.
 - **Trait impl:** `pub impl Trait for Type with method(self) { ... }` — one method per impl block
 - **Orphan rule** (error 4061): can't impl foreign trait for foreign type — use a private newtype wrapper
-- **Error handling:** use `Unit!Error` or `T!Error` for fallible return types. Normal calls auto-propagate errors (zero syntax cost). `try?` converts to `Result[T, E]` (preserves concrete `E`). `abort` is NOT catchable — prefer `fail("msg")` for defect detection (catchable + source location). See `moonbit-error-handling` skill for full conventions (abort vs fail vs raise, boundary rules, error type design).
+- **Error handling:** use `Unit!Error` or `T!Error` for fallible return types. Normal calls auto-propagate errors (zero syntax cost). `try?` converts to `Result[T, E]` but is **deprecated as of v0.10.0** (warning [0020]) — see the migration bullet below. `abort` is NOT catchable — prefer `fail("msg")` for defect detection (catchable + source location). See `moonbit-error-handling` skill for full conventions (abort vs fail vs raise, boundary rules, error type design).
+- **`try?` → `try/catch` migration (v0.10.0):** `try?` is deprecated; do NOT mechanically swap to `try expr |> Ok catch { e => Err(e) }` (the compiler discourages it). Handle the raising expression directly:
+  - **Success-test guard** — a raise *is* the failure, so just call it: `guard (try? f(x)) is Ok(v)` → `let v = f(x)` (errors auto-propagate, or wrap the whole function body in one `try/catch`).
+  - **Error-test guard** — capture as an `Option` to keep the **concrete** error type: `let captured = try { let _ = f(x); None } catch { e => Some(e) }` then `guard captured is Some(MyError(..))`. Putting `fail()`/another raising call *inside* the same `try` widens the catch binder to the supertype `Error`, costing you variant matching and `.message()` (error [4015] "Type Error has no method message").
+  - moonfmt canonicalizes a single-expression `try { x } catch { ... }` to the postfix form `x catch { ... }`.
 - **TODO syntax:** `...` is a placeholder for unimplemented code. It type-checks as any type but aborts at runtime. Do not leave `...` in committed code.
 - **Newtype wrappers (v0.9.2):** Use `struct T(Underlying)` for single-field wrappers. The old `type T Underlying` newtype declaration was removed in v0.9.2.
 - **Local mutual recursion (v0.9.2):** Local `fn name(...)` bindings no longer form a mutually recursive group implicitly (top-level `fn` declarations are unaffected). Use `letrec name = fn(...) { ... } and name2 = fn(...) { ... }`:
@@ -228,10 +289,12 @@ grep -rn '() => {}' <pkg>/*.mbt                      # Empty callback anti-patte
 ## Pitfalls
 
 - `._` syntax is deprecated — use `.0` for tuple access
-- `ref` is a reserved keyword — do not use as variable/field names
+- `ref` and `protected` are reserved keywords — do not use as variable/field/parameter names. `protected` rejection surfaces as Warning [0035].
+- `Ref::new(x)` does NOT exist — core/ref exposes `Ref::Ref(x)` and standalone `@ref.new(x)`; idiomatic form is `Ref(x)` (calls the `Ref::Ref` constructor)
+- `@hashmap.HashMap::new()` is `#deprecated` — use `@hashmap.HashMap([])` (the `HashMap::HashMap(ArrayView)` constructor with an empty array)
 - `() => {}` is a map literal rather than an empty function body; use `() => ()`
 - `loop` keyword is deprecated — use `for .. in`
-- `try?` does not catch `abort`
+- `try?` does not catch `abort` (and `try?` itself is deprecated as of v0.10.0 — [0020]; migrate to `try/catch`, see Error handling)
 - For cross-target builds, use per-file conditional compilation rather than `supported-targets` in moon.pkg.json
 - `derive(Show)` on containers (tuple/array/map/set/Option/Result) is deprecated in v0.9.2 — use `derive(Debug)` for diagnostics and `@debug.assert_eq(...)` for test assertions. `Show::output` is now consistent with `Show::to_string` (both unquoted) for `String`/`Char`
 - Old `type T Underlying` newtype no longer compiles — use `struct T(Underlying)`
@@ -281,11 +344,3 @@ For multi-project workspaces (monorepos with multiple `moon.mod.json`):
 - **Native LSP:** `moon lsp` ships an OCaml-based LSP binary. Enable in VS Code with `"moonbit.nativeLsp": true`.
 - **`MOON_WORK` env var:** Override the `moon.work` location, or set `MOON_WORK=off` to disable workspace behavior for a single invocation.
 - **Experimental `moon.mod`:** A new configuration file format replacing `moon.mod.json`. Set `NEW_MOON_MOD=1` to migrate automatically. Build rules move from `options("pre-build": ...)` in `moon.pkg` to structured `rule()` / `dev_build()` declarations in `moon.mod`, reusable across packages.
-
-## Git & PR Workflow
-
-- Always check if git is initialized before running git commands
-- After rebase operations, verify files are in the correct directories
-- When asked to 'commit remaining files', interpret generously even if phrasing is unclear
-- When merging PRs, always verify CI status is passing rather than skipped before proceeding. Never represent CI as green if any checks were skipped or failed.
-- After rebasing or refactoring, verify file paths haven't shifted unexpectedly. Run `git diff --stat` to confirm only intended files changed.
