@@ -13,6 +13,7 @@
 | Struct construction        | custom `fn Type::Type(...)` constructor | bare `{ field: value }`       |
 | Empty callback body        | `() => ()`                          | `() => {}` (map literal!)     |
 | Higher-order callbacks     | `x => expr` / `(x, y) => { ... }`    | `fn(x) { ... }` for callbacks |
+| Chained mutable ops on one value | `x..f()..g()` cascade (`x..f()` = `{ x.f(); x }`; works for any `Unit`-returning method, e.g. builder `..write_string(...)` runs) | repeated `x.f(); x.g()` statements |
 | Tuple field access         | `.0`                                | `._` (deprecated)             |
 | Fallible return type       | `T!Error` with `!` propagation      | `try?` (deprecated v0.10.0)    |
 | Iteration                  | `for .. in`                         | `loop` (deprecated)           |
