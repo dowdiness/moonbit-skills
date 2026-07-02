@@ -12,6 +12,7 @@
 | Simple boolean             | `if/else`                           |                               |
 | Struct construction        | custom `fn Type::Type(...)` constructor | bare `{ field: value }`       |
 | Empty callback body        | `() => ()`                          | `() => {}` (map literal!)     |
+| Higher-order callbacks     | `x => expr` / `(x, y) => { ... }`    | `fn(x) { ... }` for callbacks |
 | Tuple field access         | `.0`                                | `._` (deprecated)             |
 | Fallible return type       | `T!Error` with `!` propagation      | `try?` (deprecated v0.10.0)    |
 | Iteration                  | `for .. in`                         | `loop` (deprecated)           |
@@ -72,8 +73,13 @@ core API. Most "I'll just write a quick…" utilities already exist there, are
 tested, and compose with `Iter`/views. This extends the "search before you
 write" discipline above from your own project to the standard library.
 
+**Global reuse check:** for any new function, method, helper, type, or non-trivial
+data manipulation, check both project APIs and the actual MoonBit core APIs that
+fit the data shape. Do not satisfy reuse checks by listing only `Iter`/`Array`
+unless the change is purely collection iteration.
+
 **Discover first:** `moon ide doc "<keyword>"`, `moon ide doc "Type::*method*"`,
-then reach for the right package:
+`moon ide doc "@<core-package>"`, then reach for the right package:
 
 | Need | Core package(s) |
 |------|-----------------|
@@ -100,6 +106,15 @@ then reach for the right package:
 | CLI args / environment | `argparse`, `env` |
 
 Rules of thumb:
+- When reporting a reuse check, name the core APIs/packages considered (for
+  example `Map`, `Set`, `String`/`StringView`, `Bytes`/`BytesView`,
+  `Buffer`/`StringBuilder`, `Option`/`Result`, `cmp`/`math`, `Array`, `Iter`),
+  whether each was reused, and why any candidate was rejected.
+- For higher-order function arguments (`map`, `filter`, `fold`, callbacks,
+  etc.), use arrow functions: `x => x + 1`, `(acc, x) => acc + x`, or
+  `x => { ... }` for multi-statement callbacks. Reserve `fn(...) { ... }` for
+  named/local function values that need `let`/`letrec`, explicit `raise`/`async`
+  shape, or recursion.
 - A `let mut acc` + push/accumulate loop almost always has a core equivalent
   (`fold`, `map`, `filter`, `sum`, `collect`, `Array::makei`). See Control Flow —
   the for-in + mut accumulator is banned precisely because core covers it.
@@ -299,6 +314,9 @@ Rules of thumb:
 - `derive(Show)` on containers (tuple/array/map/set/Option/Result) is deprecated in v0.9.2 — use `derive(Debug)` for diagnostics and `@debug.assert_eq(...)` for test assertions. `Show::output` is now consistent with `Show::to_string` (both unquoted) for `String`/`Char`
 - Old `type T Underlying` newtype no longer compiles — use `struct T(Underlying)`
 - Local mutually recursive `fn` no longer works — use `letrec`
+- A method cannot be named `test` — `test` is reserved for `test "..." { ... }` blocks, so `fn Type::test(...)` is a parse error ([4132]/[3002]); name predicates `matches`/`eval`/etc.
+- `pub` exposes an enum/struct for **matching and reading only**; CONSTRUCTING its variants or struct fields from another package (including blackbox `_test.mbt`, which is a separate package) needs `pub(all)` — plain `pub` gives [4036] "Cannot create values of the read-only type". Data/IR types meant to be built by consumers must be `pub(all)`.
+- A struct field and a method of the same name collide (`self.x` is the field; `self.x()` can't also be a method) — name accessors differently from fields, e.g. field `root` + method `root_slot()`.
 
 ## Code Changes & Review
 
