@@ -317,6 +317,7 @@ Rules of thumb:
 - Local mutually recursive `fn` no longer works — use `letrec`
 - A method cannot be named `test` — `test` is reserved for `test "..." { ... }` blocks, so `fn Type::test(...)` is a parse error ([4132]/[3002]); name predicates `matches`/`eval`/etc.
 - `pub` exposes an enum/struct for **matching and reading only**; CONSTRUCTING its variants or struct fields from another package (including blackbox `_test.mbt`, which is a separate package) needs `pub(all)` — plain `pub` gives [4036] "Cannot create values of the read-only type". Data/IR types meant to be built by consumers must be `pub(all)`.
+- The converse trap: `pub` (vs `pub(all)`) closes **construction only** — fields stay readable, and reading a mutable-container field (`Array`/`HashMap`) hands out the live mutable reference, so external code can still mutate internals (`t.values.push(...)` compiles). Real closure for invariant-bearing types = **field-level `priv` inside a `pub` struct** (`.mbti` renders `// private fields`); accessors returning stored mutable containers should return `.copy()`. Verify closures with a known-positive probe (write the forbidden construction AND mutation, confirm the compiler rejects both) — a `.mbti` diff cannot show this hole. (Evidence: incr #354/#355, 2026-07-05.)
 - A struct field and a method of the same name collide (`self.x` is the field; `self.x()` can't also be a method) — name accessors differently from fields, e.g. field `root` + method `root_slot()`.
 
 ## Code Changes & Review
