@@ -24,6 +24,7 @@
 | Debugging derive           | `derive(Debug)` + manual `impl Show` for `inspect` | `derive(Show)` warns [0027] |
 | Regex matching             | `s =~ re"pattern"`                  | `lexmatch`/`lexmatch?` (deprecated) |
 | Reduce nesting in DSLs     | `<\|` reverse pipeline              | deeply nested parentheses     |
+| Scope `moon check` to one package | `moon check <path>` (filesystem path) | `moon check -p <module>` (that's `moon test`'s flag — `moon check` takes `[PATH]...`, not `-p`) |
 
 ## MoonBit Code Search
 
